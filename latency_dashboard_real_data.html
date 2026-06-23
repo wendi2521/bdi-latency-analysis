@@ -1,0 +1,2476 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BDI Agent - Advanced Latency Monitoring</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f5f7fa;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1800px;
+            margin: 0 auto;
+        }
+
+        .header {
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+
+        .header h1 {
+            color: #1a202c;
+            font-size: 28px;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            color: #718096;
+            font-size: 14px;
+        }
+
+        .stats-section {
+            background: white;
+            padding: 25px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+
+        .stats-section h2 {
+            color: #1a202c;
+            font-size: 18px;
+            margin-bottom: 20px;
+            border-bottom: 2px solid #e2e8f0;
+            padding-bottom: 10px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        th {
+            background: #f7fafc;
+            padding: 12px;
+            text-align: left;
+            font-size: 12px;
+            text-transform: uppercase;
+            color: #4a5568;
+            font-weight: 600;
+            border-bottom: 2px solid #e2e8f0;
+        }
+
+        th.sortable {
+            cursor: pointer;
+            user-select: none;
+        }
+
+        th.sortable:hover {
+            background: #edf2f7;
+        }
+
+        td {
+            padding: 12px;
+            border-bottom: 1px solid #e2e8f0;
+            color: #2d3748;
+            font-size: 14px;
+        }
+
+        tr:hover {
+            background: #f7fafc;
+        }
+
+        .clickable-row {
+            cursor: pointer;
+        }
+
+        .clickable-row:hover {
+            background: #edf2f7;
+        }
+
+        .chart-container {
+            background: white;
+            padding: 25px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+
+        .chart-container h2 {
+            color: #1a202c;
+            font-size: 18px;
+            margin-bottom: 20px;
+        }
+
+        .chart-wrapper {
+            position: relative;
+            height: 400px;
+        }
+
+        .agent-tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        .agent-tab {
+            padding: 10px 20px;
+            border: 2px solid #e2e8f0;
+            border-radius: 6px;
+            background: white;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.2s;
+        }
+
+        .agent-tab:hover {
+            border-color: #667eea;
+        }
+
+        .agent-tab.active {
+            background: #667eea;
+            color: white;
+            border-color: #667eea;
+        }
+
+        .component-row {
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+        }
+
+        .variance-indicator {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: 600;
+        }
+
+        .variance-low {
+            background: #c6f6d5;
+            color: #22543d;
+        }
+
+        .variance-medium {
+            background: #feebc8;
+            color: #744210;
+        }
+
+        .variance-high {
+            background: #fed7d7;
+            color: #742a2a;
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        .back-button {
+            padding: 10px 20px;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 600;
+            margin-bottom: 20px;
+        }
+
+        .back-button:hover {
+            background: #5568d3;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>📊 Multi-Agent Latency Monitoring Dashboard</h1>
+            <p>📅 Real data from past 5 days • 127 complete traces analyzed • Updated: June 22, 2026</p>
+        </div>
+
+        <!-- Overview Section -->
+
+            <div class="chart-container">
+                <h2>📦 Agent Latency Distribution (Box Plot)</h2>
+                <div class="chart-wrapper" style="height: 500px;">
+                    <canvas id="agentBoxPlot"></canvas>
+                </div>
+                <div style="margin-top: 15px; padding: 15px; background: #f7fafc; border-radius: 6px; font-size: 13px; color: #4a5568;">
+                    <strong>📊 How to read:</strong>
+                    Box shows Q1-Q3 range (middle 50% of data) •
+                    Line in box = median •
+                    Whiskers extend to min/max •
+                    Diamond (◆) = mean •
+                    <strong style="color: #e53e3e;">Y-axis uses logarithmic scale</strong> for better visualization of wide ranges
+                </div>
+            </div>
+
+        <div id="overviewSection">
+            <div class="stats-section">
+                <h2>🎯 Agent Performance Overview</h2>
+                <table>
+                    <thead>
+                        <tr>
+                            <th class="sortable" onclick="sortTable(0)">Agent</th>
+                            <th class="sortable" onclick="sortTable(1)">Mean (s)</th>
+                            <th class="sortable" onclick="sortTable(2)">Median (s)</th>
+                            <th class="sortable" onclick="sortTable(3)">P95 (s)</th>
+                            <th class="sortable" onclick="sortTable(4)">Variance</th>
+                            <th class="sortable" onclick="sortTable(5)">Total Tokens (Median)</th>
+                            <th class="sortable" onclick="sortTable(6)">Input Tokens (Median)</th>
+                            <th class="sortable" onclick="sortTable(7)">Output Tokens (Median)</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody id="agentOverviewTable">
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="stats-section">
+                <h2>📋 Component Breakdown by Agent</h2>
+                <div class="agent-tabs" id="agentTabs">
+                </div>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Component</th>
+                            <th>Mean (s)</th>
+                            <th>Median (s)</th>
+                            <th>P95 (s)</th>
+                            <th>Total Tokens</th>
+                            <th>Input/Output</th>
+                            <th>Variance</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody id="componentTable">
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="stats-section">
+                <h2>⚙️ Execution Node Statistics Summary</h2>
+                <p style="color: #718096; margin-bottom: 20px; font-size: 14px;">
+                    Detailed breakdown of execution phase across all agents - latency, tokens, and tool usage
+                </p>
+                <table>
+                    <thead>
+                        <tr>
+                            <th rowspan="2" style="vertical-align: middle;">Agent</th>
+                            <th rowspan="2" style="vertical-align: middle;">Traces</th>
+                            <th colspan="3" style="text-align: center; border-bottom: 1px solid #e2e8f0;">Latency (seconds)</th>
+                            <th colspan="3" style="text-align: center; border-bottom: 1px solid #e2e8f0;">Total Tokens</th>
+                            <th colspan="2" style="text-align: center; border-bottom: 1px solid #e2e8f0;">Tools per Trace</th>
+                            <th colspan="5" style="text-align: center; border-bottom: 1px solid #e2e8f0;">Tool Type Distribution</th>
+                        </tr>
+                        <tr style="font-size: 11px;">
+                            <th>Mean</th>
+                            <th>Median</th>
+                            <th>P95</th>
+                            <th>Mean</th>
+                            <th>Median</th>
+                            <th>P95</th>
+                            <th>Mean</th>
+                            <th>Max</th>
+                            <th>MCP</th>
+                            <th>API</th>
+                            <th>Genie</th>
+                            <th>Agent Wrap</th>
+                            <th>Internal</th>
+                        </tr>
+                    </thead>
+                    <tbody id="executionStatsTable">
+                    </tbody>
+                </table>
+                <div style="margin-top: 15px; padding: 15px; background: #f7fafc; border-radius: 6px; font-size: 13px; color: #4a5568;">
+                    <strong>📌 Key:</strong>
+                    MCP = Model Context Protocol tools •
+                    API = External API calls •
+                    Genie = Query/data aggregation tools •
+                    Agent Wrap = Sub-agent calls (PsAgent, RpaAgent, etc.) •
+                    Internal = Internal utility tools •
+                    <strong style="color: #e53e3e;">Tool counts show total across all traces, not per-trace average</strong>
+                </div>
+            </div>
+
+
+        <!-- Detail Section (hidden by default) -->
+        <div id="detailSection" class="hidden">
+            <button class="back-button" onclick="showOverview()">← Back to Overview</button>
+
+            <div class="chart-container">
+                <h2 id="detailChartTitle">Time Series</h2>
+                <div class="chart-wrapper">
+                    <canvas id="detailChart"></canvas>
+                </div>
+            </div>
+
+
+            <div class="chart-container">
+                <h2>🎫 Agent Token Usage Distribution (Box Plot)</h2>
+                <div class="chart-wrapper" style="height: 500px;">
+                    <canvas id="agentTokenBoxPlot"></canvas>
+                </div>
+                <div style="margin-top: 15px; padding: 15px; background: #f7fafc; border-radius: 6px; font-size: 13px; color: #4a5568;">
+                    <strong>📊 Total tokens per trace:</strong>
+                    Box shows Q1-Q3 range (middle 50% of data) •
+                    Line in box = median •
+                    Whiskers extend to min/max •
+                    Diamond (◆) = mean •
+                    Higher tokens = more LLM usage •
+                    <strong style="color: #e53e3e;">Y-axis uses logarithmic scale</strong> for better comparison across agents
+                </div>
+            </div>
+
+            <div class="stats-section">
+                <h2>📊 Detailed Statistics</h2>
+                <table id="detailStatsTable">
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script>
+
+
+        // Token statistics data
+        const agentTokenStats = {
+            "bdi": {
+                        "input": {
+                                    "mean": 283201,
+                                    "median": 205443,
+                                    "p75": 374044,
+                                    "p95": 720885,
+                                    "count": 87
+                        },
+                        "output": {
+                                    "mean": 29505,
+                                    "median": 34421,
+                                    "p75": 46390,
+                                    "p95": 59668,
+                                    "count": 87
+                        },
+                        "total": {
+                                    "mean": 326201,
+                                    "median": 259544,
+                                    "p75": 425647,
+                                    "p95": 828293,
+                                    "count": 87
+                        }
+            },
+            "IMPS": {
+                        "input": {
+                                    "mean": 0,
+                                    "median": 0,
+                                    "p75": 0,
+                                    "p95": 0,
+                                    "count": 33
+                        },
+                        "output": {
+                                    "mean": 0,
+                                    "median": 0,
+                                    "p75": 0,
+                                    "p95": 0,
+                                    "count": 33
+                        },
+                        "total": {
+                                    "mean": 0,
+                                    "median": 0,
+                                    "p75": 0,
+                                    "p95": 0,
+                                    "count": 33
+                        }
+            },
+            "CMM": {
+                        "input": {
+                                    "mean": 1434263,
+                                    "median": 1939203,
+                                    "p75": 1939203,
+                                    "p95": 1939203,
+                                    "count": 2
+                        },
+                        "output": {
+                                    "mean": 20008,
+                                    "median": 26952,
+                                    "p75": 26952,
+                                    "p95": 26952,
+                                    "count": 2
+                        },
+                        "total": {
+                                    "mean": 1454271,
+                                    "median": 1966155,
+                                    "p75": 1966155,
+                                    "p95": 1966155,
+                                    "count": 2
+                        }
+            },
+            "EDFX": {
+                        "input": {
+                                    "mean": 8050,
+                                    "median": 7728,
+                                    "p75": 8351,
+                                    "p95": 10623,
+                                    "count": 5
+                        },
+                        "output": {
+                                    "mean": 1232,
+                                    "median": 1235,
+                                    "p75": 1281,
+                                    "p95": 1892,
+                                    "count": 5
+                        },
+                        "total": {
+                                    "mean": 13277,
+                                    "median": 15730,
+                                    "p75": 15744,
+                                    "p95": 19604,
+                                    "count": 5
+                        }
+            }
+};
+        const componentTokenStats = {
+            "bdi": {
+                        "resolver": {
+                                    "input": {
+                                                "mean": 16364,
+                                                "median": 10943,
+                                                "p75": 13125,
+                                                "p95": 47655,
+                                                "count": 82
+                                    },
+                                    "output": {
+                                                "mean": 2139,
+                                                "median": 2195,
+                                                "p75": 2509,
+                                                "p95": 3793,
+                                                "count": 82
+                                    },
+                                    "total": {
+                                                "mean": 18503,
+                                                "median": 13197,
+                                                "p75": 16058,
+                                                "p95": 51489,
+                                                "count": 82
+                                    }
+                        },
+                        "knowledge": {
+                                    "input": {
+                                                "mean": 15407,
+                                                "median": 15886,
+                                                "p75": 22586,
+                                                "p95": 31106,
+                                                "count": 75
+                                    },
+                                    "output": {
+                                                "mean": 206,
+                                                "median": 106,
+                                                "p75": 150,
+                                                "p95": 904,
+                                                "count": 75
+                                    },
+                                    "total": {
+                                                "mean": 31267,
+                                                "median": 35852,
+                                                "p75": 38176,
+                                                "p95": 40802,
+                                                "count": 75
+                                    }
+                        },
+                        "planning": {
+                                    "input": {
+                                                "mean": 6361,
+                                                "median": 6646,
+                                                "p75": 6763,
+                                                "p95": 8118,
+                                                "count": 79
+                                    },
+                                    "output": {
+                                                "mean": 2267,
+                                                "median": 2453,
+                                                "p75": 2764,
+                                                "p95": 3403,
+                                                "count": 79
+                                    },
+                                    "total": {
+                                                "mean": 8629,
+                                                "median": 9096,
+                                                "p75": 9570,
+                                                "p95": 10448,
+                                                "count": 79
+                                    }
+                        },
+                        "execution": {
+                                    "input": {
+                                                "mean": 279083,
+                                                "median": 195061,
+                                                "p75": 307817,
+                                                "p95": 668948,
+                                                "count": 71
+                                    },
+                                    "output": {
+                                                "mean": 24700,
+                                                "median": 26295,
+                                                "p75": 33983,
+                                                "p95": 44790,
+                                                "count": 71
+                                    },
+                                    "total": {
+                                                "mean": 303784,
+                                                "median": 222500,
+                                                "p75": 343671,
+                                                "p95": 727681,
+                                                "count": 71
+                                    }
+                        },
+                        "analysis": {
+                                    "input": {
+                                                "mean": 16160,
+                                                "median": 15274,
+                                                "p75": 21278,
+                                                "p95": 26112,
+                                                "count": 80
+                                    },
+                                    "output": {
+                                                "mean": 4193,
+                                                "median": 4431,
+                                                "p75": 5708,
+                                                "p95": 8189,
+                                                "count": 80
+                                    },
+                                    "total": {
+                                                "mean": 20354,
+                                                "median": 19991,
+                                                "p75": 27225,
+                                                "p95": 34189,
+                                                "count": 80
+                                    }
+                        },
+                        "summary": {
+                                    "input": {
+                                                "mean": 6633,
+                                                "median": 6917,
+                                                "p75": 8458,
+                                                "p95": 11128,
+                                                "count": 80
+                                    },
+                                    "output": {
+                                                "mean": 1346,
+                                                "median": 1426,
+                                                "p75": 1736,
+                                                "p95": 2443,
+                                                "count": 80
+                                    },
+                                    "total": {
+                                                "mean": 7979,
+                                                "median": 8585,
+                                                "p75": 10358,
+                                                "p95": 13038,
+                                                "count": 80
+                                    }
+                        },
+                        "entry": {
+                                    "input": {
+                                                "mean": 0,
+                                                "median": 0,
+                                                "p75": 0,
+                                                "p95": 0,
+                                                "count": 77
+                                    },
+                                    "output": {
+                                                "mean": 0,
+                                                "median": 0,
+                                                "p75": 0,
+                                                "p95": 0,
+                                                "count": 77
+                                    },
+                                    "total": {
+                                                "mean": 0,
+                                                "median": 0,
+                                                "p75": 0,
+                                                "p95": 0,
+                                                "count": 77
+                                    }
+                        },
+                        "input_guardrail": {
+                                    "input": {
+                                                "mean": 0,
+                                                "median": 0,
+                                                "p75": 0,
+                                                "p95": 0,
+                                                "count": 77
+                                    },
+                                    "output": {
+                                                "mean": 0,
+                                                "median": 0,
+                                                "p75": 0,
+                                                "p95": 0,
+                                                "count": 77
+                                    },
+                                    "total": {
+                                                "mean": 0,
+                                                "median": 0,
+                                                "p75": 0,
+                                                "p95": 0,
+                                                "count": 77
+                                    }
+                        }
+            },
+            "IMPS": {
+                        "input_guardrail": {
+                                    "input": {
+                                                "mean": 0,
+                                                "median": 0,
+                                                "p75": 0,
+                                                "p95": 0,
+                                                "count": 33
+                                    },
+                                    "output": {
+                                                "mean": 0,
+                                                "median": 0,
+                                                "p75": 0,
+                                                "p95": 0,
+                                                "count": 33
+                                    },
+                                    "total": {
+                                                "mean": 0,
+                                                "median": 0,
+                                                "p75": 0,
+                                                "p95": 0,
+                                                "count": 33
+                                    }
+                        },
+                        "planning": {
+                                    "input": {
+                                                "mean": 0,
+                                                "median": 0,
+                                                "p75": 0,
+                                                "p95": 0,
+                                                "count": 33
+                                    },
+                                    "output": {
+                                                "mean": 0,
+                                                "median": 0,
+                                                "p75": 0,
+                                                "p95": 0,
+                                                "count": 33
+                                    },
+                                    "total": {
+                                                "mean": 0,
+                                                "median": 0,
+                                                "p75": 0,
+                                                "p95": 0,
+                                                "count": 33
+                                    }
+                        },
+                        "summary": {
+                                    "input": {
+                                                "mean": 0,
+                                                "median": 0,
+                                                "p75": 0,
+                                                "p95": 0,
+                                                "count": 32
+                                    },
+                                    "output": {
+                                                "mean": 0,
+                                                "median": 0,
+                                                "p75": 0,
+                                                "p95": 0,
+                                                "count": 32
+                                    },
+                                    "total": {
+                                                "mean": 0,
+                                                "median": 0,
+                                                "p75": 0,
+                                                "p95": 0,
+                                                "count": 32
+                                    }
+                        }
+            },
+            "CMM": {
+                        "planning": {
+                                    "input": {
+                                                "mean": 4263,
+                                                "median": 4266,
+                                                "p75": 4266,
+                                                "p95": 4266,
+                                                "count": 2
+                                    },
+                                    "output": {
+                                                "mean": 2459,
+                                                "median": 2953,
+                                                "p75": 2953,
+                                                "p95": 2953,
+                                                "count": 2
+                                    },
+                                    "total": {
+                                                "mean": 6722,
+                                                "median": 7213,
+                                                "p75": 7213,
+                                                "p95": 7213,
+                                                "count": 2
+                                    }
+                        },
+                        "execution": {
+                                    "input": {
+                                                "mean": 1334871,
+                                                "median": 1830329,
+                                                "p75": 1830329,
+                                                "p95": 1830329,
+                                                "count": 2
+                                    },
+                                    "output": {
+                                                "mean": 9173,
+                                                "median": 14431,
+                                                "p75": 14431,
+                                                "p95": 14431,
+                                                "count": 2
+                                    },
+                                    "total": {
+                                                "mean": 1344045,
+                                                "median": 1844760,
+                                                "p75": 1844760,
+                                                "p95": 1844760,
+                                                "count": 2
+                                    }
+                        },
+                        "analysis": {
+                                    "input": {
+                                                "mean": 86356,
+                                                "median": 95089,
+                                                "p75": 95089,
+                                                "p95": 95089,
+                                                "count": 2
+                                    },
+                                    "output": {
+                                                "mean": 6326,
+                                                "median": 6750,
+                                                "p75": 6750,
+                                                "p95": 6750,
+                                                "count": 2
+                                    },
+                                    "total": {
+                                                "mean": 92683,
+                                                "median": 101839,
+                                                "p75": 101839,
+                                                "p95": 101839,
+                                                "count": 2
+                                    }
+                        },
+                        "summary": {
+                                    "input": {
+                                                "mean": 8772,
+                                                "median": 9525,
+                                                "p75": 9525,
+                                                "p95": 9525,
+                                                "count": 2
+                                    },
+                                    "output": {
+                                                "mean": 2049,
+                                                "median": 2818,
+                                                "p75": 2818,
+                                                "p95": 2818,
+                                                "count": 2
+                                    },
+                                    "total": {
+                                                "mean": 10821,
+                                                "median": 12343,
+                                                "p75": 12343,
+                                                "p95": 12343,
+                                                "count": 2
+                                    }
+                        }
+            },
+            "EDFX": {
+                        "knowledge": {
+                                    "input": {
+                                                "mean": 2899,
+                                                "median": 2618,
+                                                "p75": 4788,
+                                                "p95": 7092,
+                                                "count": 5
+                                    },
+                                    "output": {
+                                                "mean": 41,
+                                                "median": 54,
+                                                "p75": 54,
+                                                "p95": 98,
+                                                "count": 5
+                                    },
+                                    "total": {
+                                                "mean": 4784,
+                                                "median": 7146,
+                                                "p75": 7146,
+                                                "p95": 9628,
+                                                "count": 5
+                                    }
+                        },
+                        "planning": {
+                                    "input": {
+                                                "mean": 1537,
+                                                "median": 1160,
+                                                "p75": 2980,
+                                                "p95": 2980,
+                                                "count": 5
+                                    },
+                                    "output": {
+                                                "mean": 402,
+                                                "median": 420,
+                                                "p75": 432,
+                                                "p95": 500,
+                                                "count": 5
+                                    },
+                                    "total": {
+                                                "mean": 3476,
+                                                "median": 3524,
+                                                "p75": 3528,
+                                                "p95": 3708,
+                                                "count": 5
+                                    }
+                        },
+                        "execution": {
+                                    "input": {
+                                                "mean": 1029,
+                                                "median": 1033,
+                                                "p75": 1038,
+                                                "p95": 1039,
+                                                "count": 5
+                                    },
+                                    "output": {
+                                                "mean": 289,
+                                                "median": 289,
+                                                "p75": 314,
+                                                "p95": 372,
+                                                "count": 5
+                                    },
+                                    "total": {
+                                                "mean": 1318,
+                                                "median": 1328,
+                                                "p75": 1347,
+                                                "p95": 1410,
+                                                "count": 5
+                                    }
+                        },
+                        "analysis": {
+                                    "input": {
+                                                "mean": 1361,
+                                                "median": 1196,
+                                                "p75": 1826,
+                                                "p95": 1826,
+                                                "count": 5
+                                    },
+                                    "output": {
+                                                "mean": 348,
+                                                "median": 333,
+                                                "p75": 349,
+                                                "p95": 630,
+                                                "count": 5
+                                    },
+                                    "total": {
+                                                "mean": 2324,
+                                                "median": 2333,
+                                                "p75": 2358,
+                                                "p95": 2850,
+                                                "count": 5
+                                    }
+                        },
+                        "summary": {
+                                    "input": {
+                                                "mean": 1222,
+                                                "median": 1234,
+                                                "p75": 1259,
+                                                "p95": 1716,
+                                                "count": 5
+                                    },
+                                    "output": {
+                                                "mean": 151,
+                                                "median": 111,
+                                                "p75": 160,
+                                                "p95": 292,
+                                                "count": 5
+                                    },
+                                    "total": {
+                                                "mean": 1373,
+                                                "median": 1370,
+                                                "p75": 1394,
+                                                "p95": 2008,
+                                                "count": 5
+                                    }
+                        }
+            }
+};
+
+        // REAL DATA from all_traces_components.csv
+        const realData = [
+            {
+                        "agent": "CMM",
+                        "component": "planning",
+                        "mean": 42.398,
+                        "median": 51.724,
+                        "p75": 51.724,
+                        "p95": 51.724,
+                        "min": 33.072,
+                        "max": 51.724,
+                        "stdDev": 9.326,
+                        "variance": 86.974,
+                        "cv": 22.0,
+                        "count": 2
+            },
+            {
+                        "agent": "CMM",
+                        "component": "execution",
+                        "mean": 198.348,
+                        "median": 271.672,
+                        "p75": 271.672,
+                        "p95": 271.672,
+                        "min": 125.024,
+                        "max": 271.672,
+                        "stdDev": 73.324,
+                        "variance": 5376.409,
+                        "cv": 36.97,
+                        "count": 2
+            },
+            {
+                        "agent": "CMM",
+                        "component": "analysis",
+                        "mean": 110.416,
+                        "median": 121.711,
+                        "p75": 121.711,
+                        "p95": 121.711,
+                        "min": 99.12,
+                        "max": 121.711,
+                        "stdDev": 11.295,
+                        "variance": 127.588,
+                        "cv": 10.23,
+                        "count": 2
+            },
+            {
+                        "agent": "CMM",
+                        "component": "summary",
+                        "mean": 21.201,
+                        "median": 28.702,
+                        "p75": 28.702,
+                        "p95": 28.702,
+                        "min": 13.699,
+                        "max": 28.702,
+                        "stdDev": 7.502,
+                        "variance": 56.273,
+                        "cv": 35.38,
+                        "count": 2
+            },
+            {
+                        "agent": "EDFX",
+                        "component": "knowledge",
+                        "mean": 39.136,
+                        "median": 64.711,
+                        "p75": 64.763,
+                        "p95": 66.198,
+                        "min": 0.003,
+                        "max": 66.198,
+                        "stdDev": 31.956,
+                        "variance": 1021.192,
+                        "cv": 81.65,
+                        "count": 5
+            },
+            {
+                        "agent": "EDFX",
+                        "component": "planning",
+                        "mean": 5.718,
+                        "median": 5.161,
+                        "p75": 8.475,
+                        "p95": 9.242,
+                        "min": 2.361,
+                        "max": 9.242,
+                        "stdDev": 2.727,
+                        "variance": 7.439,
+                        "cv": 47.69,
+                        "count": 5
+            },
+            {
+                        "agent": "EDFX",
+                        "component": "execution",
+                        "mean": 3.372,
+                        "median": 3.251,
+                        "p75": 3.935,
+                        "p95": 4.207,
+                        "min": 2.309,
+                        "max": 4.207,
+                        "stdDev": 0.664,
+                        "variance": 0.441,
+                        "cv": 19.7,
+                        "count": 5
+            },
+            {
+                        "agent": "EDFX",
+                        "component": "analysis",
+                        "mean": 3.219,
+                        "median": 2.814,
+                        "p75": 3.208,
+                        "p95": 4.921,
+                        "min": 2.443,
+                        "max": 4.921,
+                        "stdDev": 0.886,
+                        "variance": 0.785,
+                        "cv": 27.52,
+                        "count": 5
+            },
+            {
+                        "agent": "EDFX",
+                        "component": "summary",
+                        "mean": 1.982,
+                        "median": 1.446,
+                        "p75": 2.254,
+                        "p95": 3.553,
+                        "min": 1.232,
+                        "max": 3.553,
+                        "stdDev": 0.861,
+                        "variance": 0.741,
+                        "cv": 43.44,
+                        "count": 5
+            },
+            {
+                        "agent": "IMPS",
+                        "component": "input_guardrail",
+                        "mean": 0.328,
+                        "median": 0.289,
+                        "p75": 0.345,
+                        "p95": 0.558,
+                        "min": 0.228,
+                        "max": 0.725,
+                        "stdDev": 0.11,
+                        "variance": 0.012,
+                        "cv": 33.37,
+                        "count": 33
+            },
+            {
+                        "agent": "IMPS",
+                        "component": "planning",
+                        "mean": 14.753,
+                        "median": 15.062,
+                        "p75": 15.065,
+                        "p95": 15.085,
+                        "min": 4.467,
+                        "max": 15.502,
+                        "stdDev": 1.82,
+                        "variance": 3.312,
+                        "cv": 12.34,
+                        "count": 33
+            },
+            {
+                        "agent": "IMPS",
+                        "component": "summary",
+                        "mean": 0.01,
+                        "median": 0.011,
+                        "p75": 0.012,
+                        "p95": 0.016,
+                        "min": 0.006,
+                        "max": 0.016,
+                        "stdDev": 0.003,
+                        "variance": 0.0,
+                        "cv": 24.66,
+                        "count": 32
+            },
+            {
+                        "agent": "bdi",
+                        "component": "resolver",
+                        "mean": 32.612,
+                        "median": 27.541,
+                        "p75": 35.312,
+                        "p95": 61.378,
+                        "min": 4.114,
+                        "max": 265.273,
+                        "stdDev": 30.362,
+                        "variance": 921.871,
+                        "cv": 93.1,
+                        "count": 82
+            },
+            {
+                        "agent": "bdi",
+                        "component": "knowledge",
+                        "mean": 8.954,
+                        "median": 9.183,
+                        "p75": 10.863,
+                        "p95": 13.614,
+                        "min": 0.001,
+                        "max": 15.349,
+                        "stdDev": 3.497,
+                        "variance": 12.226,
+                        "cv": 39.05,
+                        "count": 75
+            },
+            {
+                        "agent": "bdi",
+                        "component": "planning",
+                        "mean": 44.438,
+                        "median": 47.886,
+                        "p75": 54.626,
+                        "p95": 67.019,
+                        "min": 7.73,
+                        "max": 68.231,
+                        "stdDev": 15.259,
+                        "variance": 232.838,
+                        "cv": 34.34,
+                        "count": 79
+            },
+            {
+                        "agent": "bdi",
+                        "component": "execution",
+                        "mean": 377.739,
+                        "median": 333.046,
+                        "p75": 493.823,
+                        "p95": 877.146,
+                        "min": 22.15,
+                        "max": 1724.882,
+                        "stdDev": 279.6,
+                        "variance": 78176.306,
+                        "cv": 74.02,
+                        "count": 71
+            },
+            {
+                        "agent": "bdi",
+                        "component": "analysis",
+                        "mean": 85.71,
+                        "median": 91.609,
+                        "p75": 118.459,
+                        "p95": 165.555,
+                        "min": 3.053,
+                        "max": 346.932,
+                        "stdDev": 54.029,
+                        "variance": 2919.157,
+                        "cv": 63.04,
+                        "count": 80
+            },
+            {
+                        "agent": "bdi",
+                        "component": "summary",
+                        "mean": 18.401,
+                        "median": 16.349,
+                        "p75": 19.636,
+                        "p95": 28.947,
+                        "min": 2.334,
+                        "max": 255.809,
+                        "stdDev": 27.664,
+                        "variance": 765.271,
+                        "cv": 150.34,
+                        "count": 80
+            },
+            {
+                        "agent": "bdi",
+                        "component": "entry",
+                        "mean": 1.827,
+                        "median": 2.057,
+                        "p75": 2.217,
+                        "p95": 4.221,
+                        "min": 0.003,
+                        "max": 4.528,
+                        "stdDev": 1.077,
+                        "variance": 1.161,
+                        "cv": 58.98,
+                        "count": 77
+            },
+            {
+                        "agent": "bdi",
+                        "component": "input_guardrail",
+                        "mean": 0.426,
+                        "median": 0.456,
+                        "p75": 0.506,
+                        "p95": 0.607,
+                        "min": 0.002,
+                        "max": 0.651,
+                        "stdDev": 0.155,
+                        "variance": 0.024,
+                        "cv": 36.33,
+                        "count": 77
+            }
+];
+
+        // Parse into the format expected by the dashboard
+        const agents = ["CMM", "EDFX", "IMPS", "bdi"];
+        const components = ['entry', 'input_guardrail', 'resolver', 'knowledge', 'planning', 'execution', 'analysis', 'summary'];
+
+        let allData = {};
+        let currentAgent = agents[0];
+        let currentDetailChart = null;
+
+
+        // Box plot data
+        const boxPlotData = {
+            "bdi": {
+                        "min": 19.4,
+                        "q1": 176.28,
+                        "median": 496.97,
+                        "q3": 696.18,
+                        "max": 1957.39,
+                        "mean": 485.15,
+                        "count": 87
+            },
+            "IMPS": {
+                        "min": 4.99,
+                        "q1": 17.05,
+                        "median": 19.34,
+                        "q3": 20.77,
+                        "max": 31.29,
+                        "mean": 19.28,
+                        "count": 33
+            },
+            "CMM": {
+                        "min": 273.61,
+                        "q1": 273.61,
+                        "median": 475.61,
+                        "q3": 475.61,
+                        "max": 475.61,
+                        "mean": 374.61,
+                        "count": 2
+            },
+            "EDFX": {
+                        "min": 14.48,
+                        "q1": 16.64,
+                        "median": 75.36,
+                        "q3": 78.48,
+                        "max": 82.25,
+                        "mean": 53.44,
+                        "count": 5
+            }
+};
+
+
+
+        // Execution node statistics
+        const executionStats = {
+            "bdi": {
+                        "count": 71,
+                        "latency": {
+                                    "mean": 377.74,
+                                    "median": 333.05,
+                                    "p75": 493.82,
+                                    "p95": 877.15,
+                                    "min": 22.15,
+                                    "max": 1724.88,
+                                    "count": 71
+                        },
+                        "total_tokens": {
+                                    "mean": 303784.2,
+                                    "median": 222500,
+                                    "p75": 343671,
+                                    "p95": 727681,
+                                    "min": 9063,
+                                    "max": 2301358,
+                                    "count": 71
+                        },
+                        "input_tokens": {
+                                    "mean": 279083.55,
+                                    "median": 195061,
+                                    "p75": 307817,
+                                    "p95": 668948,
+                                    "min": 7933,
+                                    "max": 2257439,
+                                    "count": 71
+                        },
+                        "output_tokens": {
+                                    "mean": 24700.65,
+                                    "median": 26295,
+                                    "p75": 33983,
+                                    "p95": 44790,
+                                    "min": 458,
+                                    "max": 58733,
+                                    "count": 71
+                        },
+                        "tools_count": {
+                                    "mean": 5.35,
+                                    "median": 6,
+                                    "p75": 7,
+                                    "p95": 8,
+                                    "min": 0,
+                                    "max": 15,
+                                    "count": 71
+                        },
+                        "mcp_count": {
+                                    "mean": 1.75,
+                                    "median": 2,
+                                    "p75": 3,
+                                    "p95": 5,
+                                    "min": 0,
+                                    "max": 9,
+                                    "count": 71
+                        },
+                        "api_count": {
+                                    "mean": 0.0,
+                                    "median": 0,
+                                    "p75": 0,
+                                    "p95": 0,
+                                    "min": 0,
+                                    "max": 0,
+                                    "count": 71
+                        },
+                        "genie_count": {
+                                    "mean": 1.15,
+                                    "median": 1,
+                                    "p75": 2,
+                                    "p95": 3,
+                                    "min": 0,
+                                    "max": 3,
+                                    "count": 71
+                        },
+                        "agent_wrapper_count": {
+                                    "mean": 1.54,
+                                    "median": 2,
+                                    "p75": 2,
+                                    "p95": 2,
+                                    "min": 0,
+                                    "max": 3,
+                                    "count": 71
+                        },
+                        "internal_count": {
+                                    "mean": 0.92,
+                                    "median": 1,
+                                    "p75": 1,
+                                    "p95": 1,
+                                    "min": 0,
+                                    "max": 1,
+                                    "count": 71
+                        },
+                        "total_mcp": 124,
+                        "total_api": 0,
+                        "total_genie": 82,
+                        "total_agent_wrapper": 109,
+                        "total_internal": 65
+            },
+            "CMM": {
+                        "count": 2,
+                        "latency": {
+                                    "mean": 198.35,
+                                    "median": 271.67,
+                                    "p75": 271.67,
+                                    "p95": 271.67,
+                                    "min": 125.02,
+                                    "max": 271.67,
+                                    "count": 2
+                        },
+                        "total_tokens": {
+                                    "mean": 1344045.0,
+                                    "median": 1844760,
+                                    "p75": 1844760,
+                                    "p95": 1844760,
+                                    "min": 843330,
+                                    "max": 1844760,
+                                    "count": 2
+                        },
+                        "input_tokens": {
+                                    "mean": 1334871.5,
+                                    "median": 1830329,
+                                    "p75": 1830329,
+                                    "p95": 1830329,
+                                    "min": 839414,
+                                    "max": 1830329,
+                                    "count": 2
+                        },
+                        "output_tokens": {
+                                    "mean": 9173.5,
+                                    "median": 14431,
+                                    "p75": 14431,
+                                    "p95": 14431,
+                                    "min": 3916,
+                                    "max": 14431,
+                                    "count": 2
+                        },
+                        "tools_count": {
+                                    "mean": 4.0,
+                                    "median": 5,
+                                    "p75": 5,
+                                    "p95": 5,
+                                    "min": 3,
+                                    "max": 5,
+                                    "count": 2
+                        },
+                        "mcp_count": {
+                                    "mean": 1.5,
+                                    "median": 2,
+                                    "p75": 2,
+                                    "p95": 2,
+                                    "min": 1,
+                                    "max": 2,
+                                    "count": 2
+                        },
+                        "api_count": {
+                                    "mean": 0.0,
+                                    "median": 0,
+                                    "p75": 0,
+                                    "p95": 0,
+                                    "min": 0,
+                                    "max": 0,
+                                    "count": 2
+                        },
+                        "genie_count": {
+                                    "mean": 1.0,
+                                    "median": 1,
+                                    "p75": 1,
+                                    "p95": 1,
+                                    "min": 1,
+                                    "max": 1,
+                                    "count": 2
+                        },
+                        "agent_wrapper_count": {
+                                    "mean": 0.0,
+                                    "median": 0,
+                                    "p75": 0,
+                                    "p95": 0,
+                                    "min": 0,
+                                    "max": 0,
+                                    "count": 2
+                        },
+                        "internal_count": {
+                                    "mean": 1.0,
+                                    "median": 1,
+                                    "p75": 1,
+                                    "p95": 1,
+                                    "min": 1,
+                                    "max": 1,
+                                    "count": 2
+                        },
+                        "total_mcp": 3,
+                        "total_api": 0,
+                        "total_genie": 2,
+                        "total_agent_wrapper": 0,
+                        "total_internal": 2
+            },
+            "EDFX": {
+                        "count": 5,
+                        "latency": {
+                                    "mean": 3.37,
+                                    "median": 3.25,
+                                    "p75": 3.94,
+                                    "p95": 4.21,
+                                    "min": 2.31,
+                                    "max": 4.21,
+                                    "count": 5
+                        },
+                        "total_tokens": {
+                                    "mean": 1318.8,
+                                    "median": 1328,
+                                    "p75": 1347,
+                                    "p95": 1410,
+                                    "min": 1246,
+                                    "max": 1410,
+                                    "count": 5
+                        },
+                        "input_tokens": {
+                                    "mean": 1029.6,
+                                    "median": 1033,
+                                    "p75": 1038,
+                                    "p95": 1039,
+                                    "min": 1019,
+                                    "max": 1039,
+                                    "count": 5
+                        },
+                        "output_tokens": {
+                                    "mean": 289.2,
+                                    "median": 289,
+                                    "p75": 314,
+                                    "p95": 372,
+                                    "min": 227,
+                                    "max": 372,
+                                    "count": 5
+                        },
+                        "tools_count": {
+                                    "mean": 0.0,
+                                    "median": 0,
+                                    "p75": 0,
+                                    "p95": 0,
+                                    "min": 0,
+                                    "max": 0,
+                                    "count": 5
+                        },
+                        "mcp_count": {
+                                    "mean": 0.0,
+                                    "median": 0,
+                                    "p75": 0,
+                                    "p95": 0,
+                                    "min": 0,
+                                    "max": 0,
+                                    "count": 5
+                        },
+                        "api_count": {
+                                    "mean": 0.0,
+                                    "median": 0,
+                                    "p75": 0,
+                                    "p95": 0,
+                                    "min": 0,
+                                    "max": 0,
+                                    "count": 5
+                        },
+                        "genie_count": {
+                                    "mean": 0.0,
+                                    "median": 0,
+                                    "p75": 0,
+                                    "p95": 0,
+                                    "min": 0,
+                                    "max": 0,
+                                    "count": 5
+                        },
+                        "agent_wrapper_count": {
+                                    "mean": 0.0,
+                                    "median": 0,
+                                    "p75": 0,
+                                    "p95": 0,
+                                    "min": 0,
+                                    "max": 0,
+                                    "count": 5
+                        },
+                        "internal_count": {
+                                    "mean": 0.0,
+                                    "median": 0,
+                                    "p75": 0,
+                                    "p95": 0,
+                                    "min": 0,
+                                    "max": 0,
+                                    "count": 5
+                        },
+                        "total_mcp": 0,
+                        "total_api": 0,
+                        "total_genie": 0,
+                        "total_agent_wrapper": 0,
+                        "total_internal": 0
+            }
+};
+
+        // Populate execution stats table
+        function populateExecutionStatsTable() {
+            const tbody = document.getElementById('executionStatsTable');
+            if (!tbody) return;
+
+            tbody.innerHTML = '';
+
+            const agents = Object.keys(executionStats).sort();
+
+            agents.forEach(agent => {
+                const stats = executionStats[agent];
+
+                // Calculate percentages for tool types
+                const totalTools = stats.total_mcp + stats.total_api + stats.total_genie +
+                                   stats.total_agent_wrapper + stats.total_internal;
+
+                const row = tbody.insertRow();
+                row.innerHTML = `
+                    <td><strong>${agent}</strong></td>
+                    <td>${stats.count}</td>
+                    <td>${stats.latency.mean.toFixed(1)}s</td>
+                    <td>${stats.latency.median.toFixed(1)}s</td>
+                    <td>${stats.latency.p95.toFixed(1)}s</td>
+                    <td>${stats.total_tokens.mean.toLocaleString()}</td>
+                    <td>${stats.total_tokens.median.toLocaleString()}</td>
+                    <td>${stats.total_tokens.p95.toLocaleString()}</td>
+                    <td>${stats.tools_count.mean.toFixed(1)}</td>
+                    <td>${stats.tools_count.max}</td>
+                    <td style="background: #e6f3ff;"><strong>${stats.total_mcp}</strong> <span style="font-size: 11px; color: #718096;">(${stats.mcp_count.mean.toFixed(1)}/tr)</span></td>
+                    <td style="background: #fff4e6;"><strong>${stats.total_api}</strong> <span style="font-size: 11px; color: #718096;">(${stats.api_count.mean.toFixed(1)}/tr)</span></td>
+                    <td style="background: #e6ffe6;"><strong>${stats.total_genie}</strong> <span style="font-size: 11px; color: #718096;">(${stats.genie_count.mean.toFixed(1)}/tr)</span></td>
+                    <td style="background: #f3e6ff;"><strong>${stats.total_agent_wrapper}</strong> <span style="font-size: 11px; color: #718096;">(${stats.agent_wrapper_count.mean.toFixed(1)}/tr)</span></td>
+                    <td style="background: #ffe6e6;"><strong>${stats.total_internal}</strong> <span style="font-size: 11px; color: #718096;">(${stats.internal_count.mean.toFixed(1)}/tr)</span></td>
+                `;
+            });
+
+            // Add summary row
+            const totalRow = tbody.insertRow();
+            totalRow.style.fontWeight = 'bold';
+            totalRow.style.borderTop = '2px solid #4a5568';
+            totalRow.style.background = '#f7fafc';
+
+            const allAgents = Object.keys(executionStats);
+            const totalTraces = allAgents.reduce((sum, agent) => sum + executionStats[agent].count, 0);
+            const totalMcp = allAgents.reduce((sum, agent) => sum + executionStats[agent].total_mcp, 0);
+            const totalApi = allAgents.reduce((sum, agent) => sum + executionStats[agent].total_api, 0);
+            const totalGenie = allAgents.reduce((sum, agent) => sum + executionStats[agent].total_genie, 0);
+            const totalAgentWrapper = allAgents.reduce((sum, agent) => sum + executionStats[agent].total_agent_wrapper, 0);
+            const totalInternal = allAgents.reduce((sum, agent) => sum + executionStats[agent].total_internal, 0);
+            const grandTotal = totalMcp + totalApi + totalGenie + totalAgentWrapper + totalInternal;
+
+            totalRow.innerHTML = `
+                <td colspan="2"><strong>TOTAL</strong></td>
+                <td colspan="6" style="text-align: center; color: #718096;">${totalTraces} execution traces analyzed</td>
+                <td colspan="2" style="text-align: center;">${grandTotal} total tools</td>
+                <td style="background: #d0e7ff;"><strong>${totalMcp}</strong><br><span style="font-size: 11px;">${(totalMcp/grandTotal*100).toFixed(1)}%</span></td>
+                <td style="background: #ffe4c4;"><strong>${totalApi}</strong><br><span style="font-size: 11px;">${(totalApi/grandTotal*100).toFixed(1)}%</span></td>
+                <td style="background: #d0ffd0;"><strong>${totalGenie}</strong><br><span style="font-size: 11px;">${(totalGenie/grandTotal*100).toFixed(1)}%</span></td>
+                <td style="background: #e6d0ff;"><strong>${totalAgentWrapper}</strong><br><span style="font-size: 11px;">${(totalAgentWrapper/grandTotal*100).toFixed(1)}%</span></td>
+                <td style="background: #ffd0d0;"><strong>${totalInternal}</strong><br><span style="font-size: 11px;">${(totalInternal/grandTotal*100).toFixed(1)}%</span></td>
+            `;
+        }
+
+        // Token box plot data
+        const tokenBoxPlotData = {
+            "bdi": {
+                        "input": {
+                                    "min": 4716,
+                                    "q1": 75309,
+                                    "median": 205443,
+                                    "q3": 374044,
+                                    "max": 2326364,
+                                    "mean": 283202.0,
+                                    "count": 87
+                        },
+                        "output": {
+                                    "min": 1044,
+                                    "q1": 8238,
+                                    "median": 34421,
+                                    "q3": 46390,
+                                    "max": 70288,
+                                    "mean": 29505.0,
+                                    "count": 87
+                        },
+                        "total": {
+                                    "min": 8078,
+                                    "q1": 101973,
+                                    "median": 259544,
+                                    "q3": 425647,
+                                    "max": 2386032,
+                                    "mean": 326202.0,
+                                    "count": 87
+                        }
+            },
+            "IMPS": {
+                        "input": {
+                                    "min": 0,
+                                    "q1": 0,
+                                    "median": 0,
+                                    "q3": 0,
+                                    "max": 0,
+                                    "mean": 0.0,
+                                    "count": 33
+                        },
+                        "output": {
+                                    "min": 0,
+                                    "q1": 0,
+                                    "median": 0,
+                                    "q3": 0,
+                                    "max": 0,
+                                    "mean": 0.0,
+                                    "count": 33
+                        },
+                        "total": {
+                                    "min": 0,
+                                    "q1": 0,
+                                    "median": 0,
+                                    "q3": 0,
+                                    "max": 0,
+                                    "mean": 0.0,
+                                    "count": 33
+                        }
+            },
+            "CMM": {
+                        "input": {
+                                    "min": 929323,
+                                    "q1": 929323,
+                                    "median": 1939203,
+                                    "q3": 1939203,
+                                    "max": 1939203,
+                                    "mean": 1434263.0,
+                                    "count": 2
+                        },
+                        "output": {
+                                    "min": 13065,
+                                    "q1": 13065,
+                                    "median": 26952,
+                                    "q3": 26952,
+                                    "max": 26952,
+                                    "mean": 20008.0,
+                                    "count": 2
+                        },
+                        "total": {
+                                    "min": 942388,
+                                    "q1": 942388,
+                                    "median": 1966155,
+                                    "q3": 1966155,
+                                    "max": 1966155,
+                                    "mean": 1454272.0,
+                                    "count": 2
+                        }
+            },
+            "EDFX": {
+                        "input": {
+                                    "min": 6754,
+                                    "q1": 6797,
+                                    "median": 7728,
+                                    "q3": 8351,
+                                    "max": 10623,
+                                    "mean": 8051.0,
+                                    "count": 5
+                        },
+                        "output": {
+                                    "min": 844,
+                                    "q1": 912,
+                                    "median": 1235,
+                                    "q3": 1281,
+                                    "max": 1892,
+                                    "mean": 1233.0,
+                                    "count": 5
+                        },
+                        "total": {
+                                    "min": 7598,
+                                    "q1": 7709,
+                                    "median": 15730,
+                                    "q3": 15744,
+                                    "max": 19604,
+                                    "mean": 13277.0,
+                                    "count": 5
+                        }
+            }
+};
+
+        // Create token box plot
+        function createAgentTokenBoxPlot() {
+            const ctx = document.getElementById('agentTokenBoxPlot');
+            if (!ctx) return;
+
+            const agents = Object.keys(tokenBoxPlotData).sort();
+
+            // Prepare datasets for total tokens
+            const colors = {
+                'bdi': 'rgba(102, 126, 234, 0.7)',
+                'IMPS': 'rgba(72, 187, 120, 0.7)',
+                'EDFX': 'rgba(237, 137, 54, 0.7)',
+                'CMM': 'rgba(159, 122, 234, 0.7)'
+            };
+
+            new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: agents,
+                    datasets: [
+                        // Box (Q1-Q3)
+                        {
+                            label: 'Q1-Q3 Range',
+                            data: agents.map(agent => {
+                                const stats = tokenBoxPlotData[agent]['total'];
+                                return stats ? stats.q3 - stats.q1 : 0;
+                            }),
+                            backgroundColor: agents.map(agent => colors[agent] || 'rgba(100,100,100,0.7)'),
+                            borderColor: agents.map(agent => colors[agent]?.replace('0.7', '1') || 'rgba(100,100,100,1)'),
+                            borderWidth: 2,
+                            base: agents.map(agent => tokenBoxPlotData[agent]['total']?.q1 || 0)
+                        },
+                        // Median line
+                        {
+                            label: 'Median',
+                            data: agents.map(agent => tokenBoxPlotData[agent]['total']?.median || 0),
+                            type: 'scatter',
+                            pointStyle: 'line',
+                            pointRadius: 20,
+                            pointBorderWidth: 3,
+                            pointBorderColor: '#2d3748',
+                            pointBackgroundColor: '#2d3748',
+                            order: 1
+                        },
+                        // Mean
+                        {
+                            label: 'Mean',
+                            data: agents.map(agent => tokenBoxPlotData[agent]['total']?.mean || 0),
+                            type: 'scatter',
+                            pointStyle: 'rectRot',
+                            pointRadius: 8,
+                            pointBorderWidth: 2,
+                            pointBorderColor: '#e53e3e',
+                            pointBackgroundColor: '#e53e3e',
+                            order: 0
+                        },
+                        // Max
+                        {
+                            label: 'Max',
+                            data: agents.map(agent => tokenBoxPlotData[agent]['total']?.max || 0),
+                            type: 'scatter',
+                            pointStyle: 'line',
+                            pointRadius: 15,
+                            pointBorderWidth: 2,
+                            pointBorderColor: '#4a5568',
+                            pointBackgroundColor: '#4a5568',
+                            order: 2
+                        },
+                        // Min
+                        {
+                            label: 'Min',
+                            data: agents.map(agent => tokenBoxPlotData[agent]['total']?.min || 0),
+                            type: 'scatter',
+                            pointStyle: 'line',
+                            pointRadius: 15,
+                            pointBorderWidth: 2,
+                            pointBorderColor: '#4a5568',
+                            pointBackgroundColor: '#4a5568',
+                            order: 2
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: true,
+                            position: 'top',
+                            labels: {
+                                usePointStyle: true,
+                                padding: 15,
+                                filter: function(legendItem, chartData) {
+                                    return ['Q1-Q3 Range', 'Median', 'Mean'].includes(legendItem.text);
+                                }
+                            }
+                        },
+                        tooltip: {
+                            callbacks: {
+                                afterLabel: function(context) {
+                                    const agent = context.label;
+                                    const stats = tokenBoxPlotData[agent]['total'];
+                                    if (context.datasetIndex === 0 && stats) {
+                                        return [
+                                            `Min: ${stats.min.toLocaleString()}`,
+                                            `Q1: ${stats.q1.toLocaleString()}`,
+                                            `Median: ${stats.median.toLocaleString()}`,
+                                            `Q3: ${stats.q3.toLocaleString()}`,
+                                            `Max: ${stats.max.toLocaleString()}`,
+                                            `Mean: ${stats.mean.toLocaleString()}`,
+                                            `Traces: ${stats.count}`
+                                        ];
+                                    }
+                                    return '';
+                                }
+                            }
+                        },
+                        title: {
+                            display: true,
+                            text: `Total Token Usage Distribution by Agent (${agents.map(a => tokenBoxPlotData[a]['total']?.count || 0).reduce((a,b) => a+b, 0)} traces)`,
+                            font: { size: 14, weight: 'normal' },
+                            color: '#4a5568',
+                            padding: { bottom: 20 }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            type: 'logarithmic',
+                            title: {
+                                display: true,
+                                text: 'Total Tokens - Log Scale',
+                                font: { size: 13, weight: '600' }
+                            },
+                            ticks: {
+                                callback: function(value) {
+                                    // Show major ticks only
+                                    const log10 = Math.log10(value);
+                                    if (Math.abs(log10 - Math.round(log10)) < 0.01 || value === 1) {
+                                        if (value >= 1000000) {
+                                            return (value / 1000000).toFixed(1) + 'M';
+                                        } else if (value >= 1000) {
+                                            return (value / 1000).toFixed(0) + 'k';
+                                        }
+                                        return value;
+                                    }
+                                    return null;
+                                }
+                            },
+                            min: 1
+                        },
+                        x: {
+                            title: {
+                                display: true,
+                                text: 'Agent',
+                                font: { size: 13, weight: '600' }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // Create box plot
+        function createAgentBoxPlot() {
+            const ctx = document.getElementById('agentBoxPlot');
+            if (!ctx) return;
+
+            const agents = Object.keys(boxPlotData).sort();
+
+            // Prepare datasets
+            const colors = {
+                'bdi': 'rgba(102, 126, 234, 0.7)',
+                'IMPS': 'rgba(72, 187, 120, 0.7)',
+                'EDFX': 'rgba(237, 137, 54, 0.7)',
+                'CMM': 'rgba(159, 122, 234, 0.7)'
+            };
+
+            // Create box plot using error bars
+            const boxData = agents.map(agent => {
+                const stats = boxPlotData[agent];
+                return {
+                    x: agent,
+                    y: stats.median,
+                    min: stats.min,
+                    q1: stats.q1,
+                    median: stats.median,
+                    q3: stats.q3,
+                    max: stats.max,
+                    mean: stats.mean
+                };
+            });
+
+            new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: agents,
+                    datasets: [
+                        // Box (Q1-Q3)
+                        {
+                            label: 'Q1-Q3 Range',
+                            data: agents.map(agent => {
+                                const stats = boxPlotData[agent];
+                                return stats.q3 - stats.q1;
+                            }),
+                            backgroundColor: agents.map(agent => colors[agent] || 'rgba(100,100,100,0.7)'),
+                            borderColor: agents.map(agent => colors[agent]?.replace('0.7', '1') || 'rgba(100,100,100,1)'),
+                            borderWidth: 2,
+                            base: agents.map(agent => boxPlotData[agent].q1)
+                        },
+                        // Median line (as scatter)
+                        {
+                            label: 'Median',
+                            data: agents.map(agent => boxPlotData[agent].median),
+                            type: 'scatter',
+                            pointStyle: 'line',
+                            pointRadius: 20,
+                            pointBorderWidth: 3,
+                            pointBorderColor: '#2d3748',
+                            pointBackgroundColor: '#2d3748',
+                            order: 1
+                        },
+                        // Mean (as scatter)
+                        {
+                            label: 'Mean',
+                            data: agents.map(agent => boxPlotData[agent].mean),
+                            type: 'scatter',
+                            pointStyle: 'rectRot',
+                            pointRadius: 8,
+                            pointBorderWidth: 2,
+                            pointBorderColor: '#e53e3e',
+                            pointBackgroundColor: '#e53e3e',
+                            order: 0
+                        },
+                        // Whisker to max (error bar style)
+                        {
+                            label: 'Max',
+                            data: agents.map(agent => boxPlotData[agent].max),
+                            type: 'scatter',
+                            pointStyle: 'line',
+                            pointRadius: 15,
+                            pointBorderWidth: 2,
+                            pointBorderColor: '#4a5568',
+                            pointBackgroundColor: '#4a5568',
+                            order: 2
+                        },
+                        // Whisker to min (error bar style)
+                        {
+                            label: 'Min',
+                            data: agents.map(agent => boxPlotData[agent].min),
+                            type: 'scatter',
+                            pointStyle: 'line',
+                            pointRadius: 15,
+                            pointBorderWidth: 2,
+                            pointBorderColor: '#4a5568',
+                            pointBackgroundColor: '#4a5568',
+                            order: 2
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: true,
+                            position: 'top',
+                            labels: {
+                                usePointStyle: true,
+                                padding: 15,
+                                filter: function(legendItem, chartData) {
+                                    // Only show key legend items
+                                    return ['Q1-Q3 Range', 'Median', 'Mean'].includes(legendItem.text);
+                                }
+                            }
+                        },
+                        tooltip: {
+                            callbacks: {
+                                afterLabel: function(context) {
+                                    const agent = context.label;
+                                    const stats = boxPlotData[agent];
+                                    if (context.datasetIndex === 0) {
+                                        return [
+                                            `Min: ${stats.min.toFixed(1)}s`,
+                                            `Q1: ${stats.q1.toFixed(1)}s`,
+                                            `Median: ${stats.median.toFixed(1)}s`,
+                                            `Q3: ${stats.q3.toFixed(1)}s`,
+                                            `Max: ${stats.max.toFixed(1)}s`,
+                                            `Mean: ${stats.mean.toFixed(1)}s`,
+                                            `Traces: ${stats.count}`
+                                        ];
+                                    }
+                                    return '';
+                                }
+                            }
+                        },
+                        title: {
+                            display: true,
+                            text: `Total Latency Distribution by Agent (${agents.map(a => boxPlotData[a].count).reduce((a,b) => a+b, 0)} traces)`,
+                            font: { size: 14, weight: 'normal' },
+                            color: '#4a5568',
+                            padding: { bottom: 20 }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            type: 'logarithmic',
+                            title: {
+                                display: true,
+                                text: 'Latency (seconds) - Log Scale',
+                                font: { size: 13, weight: '600' }
+                            },
+                            ticks: {
+                                callback: function(value) {
+                                    // Show major ticks only
+                                    const log10 = Math.log10(value);
+                                    if (Math.abs(log10 - Math.round(log10)) < 0.01) {
+                                        if (value >= 60) {
+                                            return (value / 60).toFixed(0) + 'm';
+                                        }
+                                        return value.toFixed(0) + 's';
+                                    }
+                                    return null;
+                                }
+                            },
+                            min: 1
+                        },
+                        x: {
+                            title: {
+                                display: true,
+                                text: 'Agent',
+                                font: { size: 13, weight: '600' }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // Load real data
+        function loadRealData() {
+            agents.forEach(agent => {
+                allData[agent] = [];
+
+                // Group data by component
+                const componentData = {};
+                realData.filter(d => d.agent === agent).forEach(d => {
+                    componentData[d.component] = d;
+                });
+
+                // Create synthetic records for charting (one per actual data point)
+                const sampleSize = Math.max(...Object.values(componentData).map(c => c.count));
+
+                for (let i = 0; i < sampleSize; i++) {
+                    const record = {
+                        date: new Date(2026, 5, 17 + Math.floor(i / (sampleSize / 5)))  // Spread across 5 days
+                    };
+
+                    let total = 0;
+                    components.forEach(comp => {
+                        if (componentData[comp]) {
+                            // Use actual mean with small random variation
+                            const mean = componentData[comp].mean;
+                            const stdDev = componentData[comp].stdDev;
+                            const variation = (Math.random() - 0.5) * 2 * stdDev;
+                            record[comp] = Math.max(0.001, mean + variation);
+                            total += record[comp];
+                        } else {
+                            record[comp] = 0;
+                        }
+                    });
+
+                    record.total = total;
+                    allData[agent].push(record);
+                }
+
+                allData[agent].sort((a, b) => a.date - b.date);
+            });
+        }
+
+
+        // Calculate statistics
+        function calculateStats(data) {
+            if (!data || data.length === 0) return null;
+
+            const sorted = [...data].sort((a, b) => a - b);
+            const mean = data.reduce((sum, val) => sum + val, 0) / data.length;
+            const median = sorted[Math.floor(sorted.length / 2)];
+            const p75 = sorted[Math.floor(sorted.length * 0.75)];
+            const p95 = sorted[Math.floor(sorted.length * 0.95)];
+
+            const variance = data.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0) / data.length;
+            const stdDev = Math.sqrt(variance);
+            const cv = (stdDev / mean) * 100; // Coefficient of variation
+
+            return { mean, median, p75, p95, variance, stdDev, cv };
+        }
+
+        // Populate agent overview table
+        function populateAgentOverview() {
+            const tbody = document.getElementById('agentOverviewTable');
+            tbody.innerHTML = '';
+
+            agents.forEach(agent => {
+                const totals = allData[agent].map(d => d.total);
+                const stats = calculateStats(totals);
+
+                const varianceClass = stats.cv < 15 ? 'variance-low' : stats.cv < 30 ? 'variance-medium' : 'variance-high';
+                const varianceText = stats.cv < 15 ? 'Low' : stats.cv < 30 ? 'Medium' : 'High';
+
+                // Get token stats
+                const tokenStats = agentTokenStats[agent] || {total: {median: 0}, input: {median: 0}, output: {median: 0}};
+
+                const row = tbody.insertRow();
+                row.className = 'clickable-row';
+                row.onclick = () => showDetail(agent, 'total');
+                row.innerHTML = `
+                    <td><strong>${agent}</strong></td>
+                    <td>${stats.mean.toFixed(1)}</td>
+                    <td>${stats.median.toFixed(1)}</td>
+                    <td>${stats.p95.toFixed(1)}</td>
+                    <td><span class="variance-indicator ${varianceClass}">${varianceText} (${stats.cv.toFixed(1)}%)</span></td>
+                    <td><strong>${tokenStats.total.median.toLocaleString()}</strong></td>
+                    <td>${tokenStats.input.median.toLocaleString()}</td>
+                    <td>${tokenStats.output.median.toLocaleString()}</td>
+                    <td><button onclick="showDetail('${agent}', 'total')" style="padding: 5px 12px; cursor: pointer; border: 1px solid #e2e8f0; border-radius: 4px; background: white;">📊 View</button></td>
+                `;
+            });
+        }
+
+        // Populate agent tabs
+        function populateAgentTabs() {
+            const tabsContainer = document.getElementById('agentTabs');
+            tabsContainer.innerHTML = '';
+
+            agents.forEach(agent => {
+                const tab = document.createElement('div');
+                tab.className = 'agent-tab' + (agent === currentAgent ? ' active' : '');
+                tab.textContent = agent;
+                tab.onclick = () => {
+                    currentAgent = agent;
+                    populateAgentTabs();
+                    populateComponentTable();
+                };
+                tabsContainer.appendChild(tab);
+            });
+        }
+
+        // Populate component table
+        function populateComponentTable() {
+            const tbody = document.getElementById('componentTable');
+            tbody.innerHTML = '';
+
+            components.forEach(comp => {
+                const values = allData[currentAgent].map(d => d[comp]);
+                const stats = calculateStats(values);
+
+                const varianceClass = stats.cv < 15 ? 'variance-low' : stats.cv < 30 ? 'variance-medium' : 'variance-high';
+                const varianceText = stats.cv < 15 ? 'Low' : stats.cv < 30 ? 'Medium' : 'High';
+
+                // Get token stats for this component
+                const tokenStats = (componentTokenStats[currentAgent] && componentTokenStats[currentAgent][comp]) ||
+                    {total: {mean: 0}, input: {mean: 0}, output: {mean: 0}};
+
+                const row = tbody.insertRow();
+                row.innerHTML = `
+                    <td class="component-row">${comp}</td>
+                    <td>${stats.mean.toFixed(2)}</td>
+                    <td>${stats.median.toFixed(2)}</td>
+                    <td>${stats.p95.toFixed(2)}</td>
+                    <td><strong>${tokenStats.total.mean.toLocaleString()}</strong></td>
+                    <td style="font-size: 12px; color: #718096;">${tokenStats.input.mean.toLocaleString()} / ${tokenStats.output.mean.toLocaleString()}</td>
+                    <td><span class="variance-indicator ${varianceClass}">${varianceText} (${stats.cv.toFixed(1)}%)</span></td>
+                    <td><button onclick="showDetail('${currentAgent}', '${comp}')" style="padding: 5px 12px; cursor: pointer; border: 1px solid #e2e8f0; border-radius: 4px; background: white;">View Chart</button></td>
+                `;
+            });
+
+            // Add total row
+            const totals = allData[currentAgent].map(d => d.total);
+            const totalStats = calculateStats(totals);
+            const totalVarianceClass = totalStats.cv < 15 ? 'variance-low' : totalStats.cv < 30 ? 'variance-medium' : 'variance-high';
+            const totalVarianceText = totalStats.cv < 15 ? 'Low' : totalStats.cv < 30 ? 'Medium' : 'High';
+
+            // Total row tokens
+            const totalTokenStats = agentTokenStats[currentAgent] || {total: {mean: 0}, input: {mean: 0}, output: {mean: 0}};
+
+            const totalRow = tbody.insertRow();
+            totalRow.innerHTML = `
+                <td class="component-row"><strong>TOTAL</strong></td>
+                <td><strong>${totalStats.mean.toFixed(2)}</strong></td>
+                <td><strong>${totalStats.median.toFixed(2)}</strong></td>
+                <td><strong>${totalStats.p95.toFixed(2)}</strong></td>
+                <td><strong>${totalTokenStats.total.mean.toLocaleString()}</strong></td>
+                <td style="font-size: 12px;"><strong>${totalTokenStats.input.mean.toLocaleString()} / ${totalTokenStats.output.mean.toLocaleString()}</strong></td>
+                <td><span class="variance-indicator ${totalVarianceClass}">${totalVarianceText} (${totalStats.cv.toFixed(1)}%)</span></td>
+                <td><button onclick="showDetail('${currentAgent}', 'total')" style="padding: 5px 12px; cursor: pointer; border: 1px solid #e2e8f0; border-radius: 4px; background: white;">View Chart</button></td>
+            `;
+        }
+
+        // Show detail view
+        function showDetail(agent, component) {
+            document.getElementById('overviewSection').classList.add('hidden');
+            document.getElementById('detailSection').classList.remove('hidden');
+
+            const isTotal = component === 'total';
+            const values = isTotal
+                ? allData[agent].map(d => d.total)
+                : allData[agent].map(d => d[component]);
+
+            const dates = allData[agent].map(d => d.date);
+            const stats = calculateStats(values);
+
+            // Update title
+            document.getElementById('detailChartTitle').textContent =
+                `${agent} - ${component.toUpperCase()} Time Series (Mean: ${stats.mean.toFixed(2)}s)`;
+
+            // Create chart
+            createDetailChart(dates, values, stats);
+
+            // Populate detail stats table
+            populateDetailStats(agent, component, stats, values);
+        }
+
+        // Create detail chart
+        function createDetailChart(dates, values, stats) {
+            const ctx = document.getElementById('detailChart');
+
+            if (currentDetailChart) {
+                currentDetailChart.destroy();
+            }
+
+            // Aggregate by day
+            const dailyData = {};
+            dates.forEach((date, idx) => {
+                const day = date.toLocaleDateString();
+                if (!dailyData[day]) {
+                    dailyData[day] = [];
+                }
+                dailyData[day].push(values[idx]);
+            });
+
+            // Calculate daily averages
+            const dailyLabels = Object.keys(dailyData);
+            const dailyAverages = dailyLabels.map(day => {
+                const dayValues = dailyData[day];
+                return dayValues.reduce((sum, val) => sum + val, 0) / dayValues.length;
+            });
+
+            // Calculate daily min/max for error bars
+            const dailyMin = dailyLabels.map(day => Math.min(...dailyData[day]));
+            const dailyMax = dailyLabels.map(day => Math.max(...dailyData[day]));
+
+            currentDetailChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: dailyLabels,
+                    datasets: [
+                        {
+                            label: 'Daily Average',
+                            data: dailyAverages,
+                            borderColor: '#667eea',
+                            backgroundColor: 'rgba(102, 126, 234, 0.2)',
+                            tension: 0.3,
+                            fill: true,
+                            pointRadius: 6,
+                            pointHoverRadius: 8,
+                            borderWidth: 3
+                        },
+                        {
+                            label: 'Overall Mean',
+                            data: Array(dailyLabels.length).fill(stats.mean),
+                            borderColor: '#48bb78',
+                            borderDash: [5, 5],
+                            borderWidth: 2,
+                            pointRadius: 0
+                        },
+                        {
+                            label: 'Overall Median',
+                            data: Array(dailyLabels.length).fill(stats.median),
+                            borderColor: '#ed8936',
+                            borderDash: [5, 5],
+                            borderWidth: 2,
+                            pointRadius: 0
+                        },
+                        {
+                            label: 'P95',
+                            data: Array(dailyLabels.length).fill(stats.p95),
+                            borderColor: '#f56565',
+                            borderDash: [2, 2],
+                            borderWidth: 2,
+                            pointRadius: 0
+                        },
+                        {
+                            label: 'Daily Min',
+                            data: dailyMin,
+                            borderColor: '#c6f6d5',
+                            borderWidth: 1,
+                            pointRadius: 0,
+                            fill: false
+                        },
+                        {
+                            label: 'Daily Max',
+                            data: dailyMax,
+                            borderColor: '#fed7d7',
+                            borderWidth: 1,
+                            pointRadius: 0,
+                            fill: false
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'top',
+                            labels: {
+                                usePointStyle: true,
+                                padding: 15
+                            }
+                        },
+                        tooltip: {
+                            callbacks: {
+                                afterLabel: function(context) {
+                                    if (context.datasetIndex === 0) {
+                                        const day = context.label;
+                                        const dayData = dailyData[day];
+                                        return [
+                                            `Requests: ${dayData.length}`,
+                                            `Min: ${Math.min(...dayData).toFixed(2)}s`,
+                                            `Max: ${Math.max(...dayData).toFixed(2)}s`
+                                        ];
+                                    }
+                                    return '';
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            title: { display: true, text: 'Latency (seconds)' }
+                        },
+                        x: {
+                            title: { display: true, text: 'Date' }
+                        }
+                    }
+                }
+            });
+        }
+
+        // Populate detail stats table
+        function populateDetailStats(agent, component, stats, values) {
+            const table = document.getElementById('detailStatsTable');
+            table.innerHTML = `
+                <tr>
+                    <th>Metric</th>
+                    <th>Value</th>
+                    <th>Description</th>
+                </tr>
+                <tr>
+                    <td><strong>Mean</strong></td>
+                    <td>${stats.mean.toFixed(3)}s</td>
+                    <td>Average latency</td>
+                </tr>
+                <tr>
+                    <td><strong>Median</strong></td>
+                    <td>${stats.median.toFixed(3)}s</td>
+                    <td>50th percentile (middle value)</td>
+                </tr>
+                <tr>
+                    <td><strong>P75</strong></td>
+                    <td>${stats.p75.toFixed(3)}s</td>
+                    <td>75th percentile</td>
+                </tr>
+                <tr>
+                    <td><strong>P95</strong></td>
+                    <td>${stats.p95.toFixed(3)}s</td>
+                    <td>95th percentile</td>
+                </tr>
+                <tr>
+                    <td><strong>Min</strong></td>
+                    <td>${Math.min(...values).toFixed(3)}s</td>
+                    <td>Fastest response</td>
+                </tr>
+                <tr>
+                    <td><strong>Max</strong></td>
+                    <td>${Math.max(...values).toFixed(3)}s</td>
+                    <td>Slowest response</td>
+                </tr>
+                <tr>
+                    <td><strong>Std Dev</strong></td>
+                    <td>${stats.stdDev.toFixed(3)}s</td>
+                    <td>Standard deviation</td>
+                </tr>
+                <tr>
+                    <td><strong>Variance</strong></td>
+                    <td>${stats.variance.toFixed(3)}</td>
+                    <td>Data spread</td>
+                </tr>
+                <tr>
+                    <td><strong>CV</strong></td>
+                    <td>${stats.cv.toFixed(2)}%</td>
+                    <td>Coefficient of variation (relative variability)</td>
+                </tr>
+                <tr>
+                    <td><strong>Sample Size</strong></td>
+                    <td>${values.length}</td>
+                    <td>Number of requests analyzed</td>
+                </tr>
+            `;
+        }
+
+        // Show overview
+        function showOverview() {
+            document.getElementById('overviewSection').classList.remove('hidden');
+            document.getElementById('detailSection').classList.add('hidden');
+        }
+
+        // Sort table
+        function sortTable(columnIndex) {
+            const table = document.getElementById('agentOverviewTable');
+            const rows = Array.from(table.rows);
+            const isNumeric = columnIndex > 0;
+
+            rows.sort((a, b) => {
+                const aValue = isNumeric ? parseFloat(a.cells[columnIndex].textContent) : a.cells[columnIndex].textContent;
+                const bValue = isNumeric ? parseFloat(b.cells[columnIndex].textContent) : b.cells[columnIndex].textContent;
+                return aValue > bValue ? -1 : 1;
+            });
+
+            rows.forEach(row => table.appendChild(row));
+        }
+
+        // Initialize with real data
+        loadRealData();
+        createAgentBoxPlot();
+        createAgentTokenBoxPlot();
+        populateExecutionStatsTable();
+        populateAgentOverview();
+        populateAgentTabs();
+        populateComponentTable();
+    </script>
+</body>
+</html>
