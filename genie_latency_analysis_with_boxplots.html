@@ -1,0 +1,1153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Genie Tool Call Latency Analysis</title>
+    <script src="https://cdn.jsdelivr.net/npm/plotly.js@2.27.0/dist/plotly.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            padding: 40px;
+            border-radius: 15px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.1);
+        }
+
+        h1 {
+            color: #2c3e50;
+            text-align: center;
+            margin-bottom: 30px;
+            font-size: 2.5em;
+            border-bottom: 4px solid #3498db;
+            padding-bottom: 15px;
+        }
+
+        .summary-box {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            border-radius: 10px;
+            margin-bottom: 30px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+        }
+
+        .summary-box h2 {
+            font-size: 1.8em;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+
+        .summary-stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-top: 20px;
+        }
+
+        .stat-card {
+            background: rgba(255,255,255,0.15);
+            padding: 20px;
+            border-radius: 8px;
+            text-align: center;
+            backdrop-filter: blur(10px);
+        }
+
+        .stat-card h3 {
+            font-size: 1.1em;
+            margin-bottom: 10px;
+            opacity: 0.9;
+        }
+
+        .stat-card .value {
+            font-size: 2.5em;
+            font-weight: bold;
+            margin: 10px 0;
+        }
+
+        .formula-box {
+            background: #fff3cd;
+            border-left: 5px solid #ffc107;
+            padding: 20px;
+            margin: 30px 0;
+            border-radius: 5px;
+        }
+
+        .formula-box h3 {
+            color: #856404;
+            margin-bottom: 15px;
+            font-size: 1.3em;
+        }
+
+        .formula {
+            font-family: 'Courier New', monospace;
+            background: white;
+            padding: 15px;
+            border-radius: 5px;
+            font-size: 1.1em;
+            color: #333;
+            border: 1px solid #ffc107;
+            margin: 10px 0;
+        }
+
+        .formula .highlight {
+            color: #d9534f;
+            font-weight: bold;
+        }
+
+        .ranking-section {
+            background: #f8f9fa;
+            padding: 30px;
+            border-radius: 10px;
+            margin: 30px 0;
+        }
+
+        .ranking-section h2 {
+            color: #2c3e50;
+            margin-bottom: 25px;
+            font-size: 1.8em;
+            text-align: center;
+        }
+
+        .ranking-item {
+            display: flex;
+            align-items: center;
+            padding: 20px;
+            margin: 15px 0;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.08);
+            transition: transform 0.3s;
+        }
+
+        .ranking-item:hover {
+            transform: translateX(10px);
+        }
+
+        .ranking-item.first {
+            border-left: 5px solid #28a745;
+            background: linear-gradient(to right, #d4edda 0%, white 100%);
+        }
+
+        .ranking-item.second {
+            border-left: 5px solid #ffc107;
+        }
+
+        .ranking-item.third {
+            border-left: 5px solid #17a2b8;
+        }
+
+        .rank-number {
+            font-size: 2.5em;
+            font-weight: bold;
+            margin-right: 20px;
+            color: #6c757d;
+            min-width: 50px;
+        }
+
+        .rank-content {
+            flex-grow: 1;
+        }
+
+        .rank-name {
+            font-size: 1.3em;
+            font-weight: bold;
+            color: #2c3e50;
+        }
+
+        .rank-details {
+            color: #6c757d;
+            font-size: 1.1em;
+            margin-top: 5px;
+        }
+
+        .stage-card {
+            background: white;
+            border-radius: 10px;
+            padding: 25px;
+            margin: 25px 0;
+            box-shadow: 0 3px 15px rgba(0,0,0,0.1);
+            border-left: 6px solid #3498db;
+        }
+
+        .stage-card.warning {
+            border-left-color: #e74c3c;
+            background: linear-gradient(to right, #fee 0%, white 100%);
+        }
+
+        .stage-card h3 {
+            color: #2c3e50;
+            font-size: 1.5em;
+            margin-bottom: 15px;
+        }
+
+        .stage-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+            flex-wrap: wrap;
+        }
+
+        .stage-title {
+            font-size: 1.6em;
+            color: #2c3e50;
+            font-weight: bold;
+        }
+
+        .stage-count {
+            background: #3498db;
+            color: white;
+            padding: 8px 15px;
+            border-radius: 20px;
+            font-size: 0.9em;
+        }
+
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+            margin: 20px 0;
+        }
+
+        .metric {
+            text-align: center;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 8px;
+        }
+
+        .metric-label {
+            font-size: 0.85em;
+            color: #6c757d;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .metric-value {
+            font-size: 1.8em;
+            font-weight: bold;
+            color: #2c3e50;
+            margin-top: 5px;
+        }
+
+        .percentile-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+            background: white;
+        }
+
+        .percentile-table th,
+        .percentile-table td {
+            padding: 12px;
+            text-align: center;
+            border: 1px solid #dee2e6;
+        }
+
+        .percentile-table th {
+            background: #495057;
+            color: white;
+            font-weight: bold;
+            text-transform: uppercase;
+            font-size: 0.85em;
+            letter-spacing: 1px;
+        }
+
+        .percentile-table tr:nth-child(even) {
+            background: #f8f9fa;
+        }
+
+        .percentile-table tr:hover {
+            background: #e9ecef;
+        }
+
+        .insight-box {
+            background: #e7f3ff;
+            border-left: 4px solid #0066cc;
+            padding: 15px;
+            margin-top: 15px;
+            border-radius: 5px;
+        }
+
+        .insight-box strong {
+            color: #0066cc;
+        }
+
+        .warning-insight {
+            background: #fff3cd;
+            border-left-color: #ffc107;
+        }
+
+        .warning-insight strong {
+            color: #856404;
+        }
+
+        .alert-insight {
+            background: #f8d7da;
+            border-left-color: #dc3545;
+        }
+
+        .alert-insight strong {
+            color: #721c24;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 5px 12px;
+            border-radius: 15px;
+            font-size: 0.85em;
+            font-weight: bold;
+            margin-left: 10px;
+        }
+
+        .badge-success {
+            background: #28a745;
+            color: white;
+        }
+
+        .badge-warning {
+            background: #ffc107;
+            color: #333;
+        }
+
+        .badge-danger {
+            background: #dc3545;
+            color: white;
+        }
+
+        hr {
+            border: none;
+            border-top: 2px solid #dee2e6;
+            margin: 40px 0;
+        }
+
+        .footer {
+            text-align: center;
+            margin-top: 50px;
+            padding-top: 20px;
+            border-top: 2px solid #dee2e6;
+            color: #6c757d;
+        }
+
+        .boxplot-container {
+            width: 100%;
+            height: 400px;
+            margin: 20px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>📊 GENIE TOOL CALL LATENCY ANALYSIS</h1>
+
+        <div class="summary-box">
+            <h2>📊 Executive Summary</h2>
+            <div class="summary-stats">
+                <div class="stat-card">
+                    <h3>Total Records</h3>
+                    <div class="value">1,331</div>
+                    <p>Tool Call Records</p>
+                </div>
+                <div class="stat-card">
+                    <h3>Median Time</h3>
+                    <div class="value">35.31s</div>
+                    <p>P50 (Median)</p>
+                </div>
+                <div class="stat-card">
+                    <h3>Mean Time</h3>
+                    <div class="value">40.72s</div>
+                    <p>Average Duration</p>
+                </div>
+                <div class="stat-card">
+                    <h3>P90 Time</h3>
+                    <div class="value">74.45s</div>
+                    <p>90th Percentile</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="formula-box">
+            <h3>⚙️ How Total Time is Calculated</h3>
+            <p style="margin-bottom: 15px;">The total duration for each Genie tool call is calculated using the following formula:</p>
+            <div class="formula">
+                <span class="highlight">total_duration</span> = asking_ai + pending_warehouse + <span class="highlight">Execution</span>
+            </div>
+            <p style="margin-top: 15px;"><strong>Note:</strong> The <code>Execution</code> column represents <code>max(sql_execution, executing_query)</code> because these represent alternative execution paths, not nested stages. When both exist, only the larger value is counted to avoid double-counting the query execution time.</p>
+        </div>
+
+        <div class="ranking-section">
+            <h2>🔍 Which Part Consumes Most Time?</h2>
+            <p style="text-align: center; margin-bottom: 25px; font-size: 1.1em; color: #6c757d;">
+                Components add to 100% of total time
+            </p>
+
+            <div style="display: flex; align-items: center; justify-content: center; gap: 50px; margin: 30px 0;">
+                <!-- Pie Chart -->
+                <div style="position: relative; width: 300px; height: 300px;">
+                    <svg viewBox="0 0 200 200" style="transform: rotate(-90deg);">
+                        <!-- Query Execution: 49.8% (179.28 degrees) -->
+                        <circle cx="100" cy="100" r="80" fill="none"
+                                stroke="#28a745" stroke-width="60"
+                                stroke-dasharray="251.2 251.2"
+                                stroke-dashoffset="0"
+                                style="transition: all 0.3s ease;">
+                        </circle>
+                        <!-- Warehouse Wait: 31.7% (114.12 degrees) starting after 49.8% -->
+                        <circle cx="100" cy="100" r="80" fill="none"
+                                stroke="#ffc107" stroke-width="60"
+                                stroke-dasharray="159.2 342"
+                                stroke-dashoffset="-251.2"
+                                style="transition: all 0.3s ease;">
+                        </circle>
+                        <!-- AI Processing: 20.4% (73.44 degrees) starting after 81.5% -->
+                        <circle cx="100" cy="100" r="80" fill="none"
+                                stroke="#17a2b8" stroke-width="60"
+                                stroke-dasharray="102.4 400"
+                                stroke-dashoffset="-410.4"
+                                style="transition: all 0.3s ease;">
+                        </circle>
+                    </svg>
+                </div>
+
+                <!-- Legend -->
+                <div style="display: flex; flex-direction: column; gap: 20px;">
+                    <div style="display: flex; align-items: center; gap: 15px;">
+                        <div style="width: 30px; height: 30px; background: #28a745; border-radius: 5px;"></div>
+                        <div>
+                            <div style="font-size: 1.2em; font-weight: bold; color: #2c3e50;">Query Execution</div>
+                            <div style="color: #6c757d; margin-top: 3px;">49.8% • 20.26s (mean)</div>
+                        </div>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 15px;">
+                        <div style="width: 30px; height: 30px; background: #ffc107; border-radius: 5px;"></div>
+                        <div>
+                            <div style="font-size: 1.2em; font-weight: bold; color: #2c3e50;">Warehouse Wait</div>
+                            <div style="color: #6c757d; margin-top: 3px;">31.7% • 12.92s (mean)</div>
+                        </div>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 15px;">
+                        <div style="width: 30px; height: 30px; background: #17a2b8; border-radius: 5px;"></div>
+                        <div>
+                            <div style="font-size: 1.2em; font-weight: bold; color: #2c3e50;">AI Processing</div>
+                            <div style="color: #6c757d; margin-top: 3px;">20.4% • 8.30s (mean)</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <hr>
+
+        <h2 style="text-align: center; color: #2c3e50; font-size: 2em; margin-bottom: 30px;">📈 Stage Distributions</h2>
+
+        <!-- Combined Box Plot -->
+        <div class="stage-card">
+            <h2 style="text-align: center; color: #2c3e50; margin-bottom: 20px;">Stage Duration Comparison</h2>
+            <div style="height: 500px;" id="boxplot-combined"></div>
+        </div>
+
+        <hr>
+
+        <!-- NEW SECTION: High Duration Analysis -->
+        <h2 style="text-align: center; color: #2c3e50; font-size: 2em; margin-bottom: 30px;">⚠️ High Duration Analysis (> 50 seconds)</h2>
+
+        <div class="stage-card warning">
+            <div class="stage-header">
+                <div class="stage-title">Records with total_duration > 50s</div>
+                <div class="stage-count">324 records (24.3%)</div>
+            </div>
+
+            <div class="metrics-grid">
+                <div class="metric">
+                    <div class="metric-label">Median</div>
+                    <div class="metric-value">68.67s</div>
+                </div>
+                <div class="metric">
+                    <div class="metric-label">Mean</div>
+                    <div class="metric-value">72.50s</div>
+                </div>
+                <div class="metric">
+                    <div class="metric-label">Max</div>
+                    <div class="metric-value">393.87s</div>
+                </div>
+                <div class="metric">
+                    <div class="metric-label">Count</div>
+                    <div class="metric-value">324</div>
+                </div>
+            </div>
+
+            <h3 style="margin-top: 30px; margin-bottom: 20px; color: #2c3e50;">biggest_stage Distribution (for records > 50s)</h3>
+
+            <div style="background: #f8f9fa; padding: 30px; border-radius: 10px; margin: 20px 0;">
+                <div style="display: flex; align-items: center; justify-content: center; gap: 50px; margin: 30px 0;">
+                    <!-- Pie Chart -->
+                    <div style="position: relative; width: 300px; height: 300px;">
+                        <svg viewBox="0 0 200 200" style="transform: rotate(-90deg);">
+                            <!-- Execution: 81.2% (292.32 degrees) -->
+                            <circle cx="100" cy="100" r="80" fill="none"
+                                    stroke="#28a745" stroke-width="60"
+                                    stroke-dasharray="407 95"
+                                    stroke-dashoffset="0"
+                                    style="transition: all 0.3s ease;">
+                            </circle>
+                            <!-- Asking AI: 9.6% (34.56 degrees) starting after 81.2% -->
+                            <circle cx="100" cy="100" r="80" fill="none"
+                                    stroke="#17a2b8" stroke-width="60"
+                                    stroke-dasharray="48.2 454"
+                                    stroke-dashoffset="-407"
+                                    style="transition: all 0.3s ease;">
+                            </circle>
+                            <!-- Warehouse: 9.3% (33.48 degrees) starting after 90.8% -->
+                            <circle cx="100" cy="100" r="80" fill="none"
+                                    stroke="#ffc107" stroke-width="60"
+                                    stroke-dasharray="46.7 456"
+                                    stroke-dashoffset="-455.2"
+                                    style="transition: all 0.3s ease;">
+                            </circle>
+                        </svg>
+                    </div>
+
+                    <!-- Legend -->
+                    <div style="display: flex; flex-direction: column; gap: 20px;">
+                        <div style="display: flex; align-items: center; gap: 15px;">
+                            <div style="width: 30px; height: 30px; background: #28a745; border-radius: 5px;"></div>
+                            <div>
+                                <div style="font-size: 1.2em; font-weight: bold; color: #2c3e50;">Execution</div>
+                                <div style="color: #6c757d; margin-top: 3px;">81.2% • 263 records</div>
+                            </div>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 15px;">
+                            <div style="width: 30px; height: 30px; background: #17a2b8; border-radius: 5px;"></div>
+                            <div>
+                                <div style="font-size: 1.2em; font-weight: bold; color: #2c3e50;">Asking AI</div>
+                                <div style="color: #6c757d; margin-top: 3px;">9.6% • 31 records</div>
+                            </div>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 15px;">
+                            <div style="width: 30px; height: 30px; background: #ffc107; border-radius: 5px;"></div>
+                            <div>
+                                <div style="font-size: 1.2em; font-weight: bold; color: #2c3e50;">Warehouse</div>
+                                <div style="color: #6c757d; margin-top: 3px;">9.3% • 30 records</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div style="text-align: center; color: #6c757d; font-size: 1em; margin-top: 20px;">
+                    Total high-duration cases (> 50s): 324 records
+                </div>
+            </div>
+
+            <div class="insight-box alert-insight" style="margin-top: 30px;">
+                <strong>Key Finding:</strong> When queries take longer than 50 seconds, the execution stage is the bottleneck in 4 out of 5 cases. Average execution time for these slow cases is 47.76 seconds (66% of total time).
+            </div>
+        </div>
+
+
+        <hr>
+
+        <h2 style="text-align: center; color: #2c3e50; font-size: 2em; margin-bottom: 30px;">🔧 Tool-Level Analysis</h2>
+
+        <!-- MASTER LATENCY TABLE -->
+        <div class="stage-card" style="background: linear-gradient(to right, #f8f9fa 0%, white 100%); border-left: 6px solid #667eea;">
+            <h2 style="color: #2c3e50; text-align: center; margin-bottom: 25px;">📊 Master Latency Table - All Tools & Stages</h2>
+            <p style="text-align: center; color: #6c757d; margin-bottom: 20px;">Mean duration (seconds) for each stage by tool</p>
+
+            <table class="percentile-table" style="margin: 20px 0;">
+                <thead>
+                    <tr>
+                        <th style="text-align: left; min-width: 200px;">Tool</th>
+                        <th>Records</th>
+                        <th>Asking AI (s)</th>
+                        <th>Pending Warehouse (s)</th>
+                        <th>Execution (s)</th>
+                        <th style="background: #3498db;">Total (s)</th>
+                        <th>Dominant Stage</th>
+                    </tr>
+                </thead>
+                <tbody>
+
+                    <tr>
+                        <td style="text-align: left; font-weight: bold;">query_genie</td>
+                        <td>269</td>
+                        <td style="">9.98</td>
+                        <td style="">8.89</td>
+                        <td style="background: #f8d7da; font-weight: bold;">31.93</td>
+                        <td style="background: #e3f2fd; font-weight: bold;">50.10</td>
+                        <td><span class="badge badge-success">Execution</span></td>
+                    </tr>
+
+                    <tr>
+                        <td style="text-align: left; font-weight: bold;">get_data_aggregation</td>
+                        <td>354</td>
+                        <td style="">7.79</td>
+                        <td style="">9.76</td>
+                        <td style="background: #f8d7da; font-weight: bold;">29.07</td>
+                        <td style="background: #e3f2fd; font-weight: bold;">46.54</td>
+                        <td><span class="badge badge-success">Execution</span></td>
+                    </tr>
+
+                    <tr>
+                        <td style="text-align: left; font-weight: bold;">get_data_aggregation_edfx</td>
+                        <td>207</td>
+                        <td style="">6.71</td>
+                        <td style="background: #fff3cd; font-weight: bold;">18.60</td>
+                        <td style="">11.51</td>
+                        <td style="background: #e3f2fd; font-weight: bold;">35.65</td>
+                        <td><span class="badge badge-success">Warehouse</span></td>
+                    </tr>
+
+                    <tr>
+                        <td style="text-align: left; font-weight: bold;">PSAnalysisResults</td>
+                        <td>343</td>
+                        <td style="">8.27</td>
+                        <td style="background: #fff3cd; font-weight: bold;">17.87</td>
+                        <td style="">6.82</td>
+                        <td style="background: #e3f2fd; font-weight: bold;">31.51</td>
+                        <td><span class="badge badge-success">Warehouse</span></td>
+                    </tr>
+
+                    <tr>
+                        <td style="text-align: left; font-weight: bold;">get_benchmark</td>
+                        <td>18</td>
+                        <td style="">14.41</td>
+                        <td style="background: #fff3cd; font-weight: bold;">22.44</td>
+                        <td style="">0.50</td>
+                        <td style="background: #e3f2fd; font-weight: bold;">29.87</td>
+                        <td><span class="badge badge-success">Warehouse</span></td>
+                    </tr>
+
+                    <tr>
+                        <td style="text-align: left; font-weight: bold;">query_cbmo_portfolio_loan_review</td>
+                        <td>30</td>
+                        <td style="">4.91</td>
+                        <td style="background: #fff3cd; font-weight: bold;">6.99</td>
+                        <td style="">1.41</td>
+                        <td style="background: #e3f2fd; font-weight: bold;">13.08</td>
+                        <td><span class="badge badge-success">Warehouse</span></td>
+                    </tr>
+
+                </tbody>
+            </table>
+
+            <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; margin-top: 25px;">
+                <div style="text-align: center; padding: 10px; background: #d4edda; border-radius: 5px;">
+                    <strong>🟢 Asking AI Dominated</strong>
+                </div>
+                <div style="text-align: center; padding: 10px; background: #fff3cd; border-radius: 5px;">
+                    <strong>🟡 Warehouse Dominated</strong>
+                </div>
+                <div style="text-align: center; padding: 10px; background: #f8d7da; border-radius: 5px;">
+                    <strong>🔴 Execution Dominated</strong>
+                </div>
+            </div>
+        </div>
+
+
+        <div class="stage-card">
+            <div class="stage-header">
+                <div class="stage-title">🔧 query_genie</div>
+                <div class="stage-count">269 calls (22.0%)</div>
+            </div>
+
+            <div class="metrics-grid">
+                <div class="metric">
+                    <div class="metric-label">Median</div>
+                    <div class="metric-value">47.46s</div>
+                </div>
+                <div class="metric">
+                    <div class="metric-label">Mean</div>
+                    <div class="metric-value">50.10s</div>
+                </div>
+                <div class="metric">
+                    <div class="metric-label">Min</div>
+                    <div class="metric-value">6.35s</div>
+                </div>
+                <div class="metric">
+                    <div class="metric-label">Max</div>
+                    <div class="metric-value">393.87s</div>
+                </div>
+            </div>
+
+            <table class="percentile-table">
+                <thead>
+                    <tr>
+                        <th>P25</th>
+                        <th>P50 (Median)</th>
+                        <th>P75</th>
+                        <th>P90</th>
+                        <th>P95</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><strong>30.35s</strong></td>
+                        <td><strong>47.46s</strong></td>
+                        <td><strong>64.42s</strong></td>
+                        <td><strong>86.63s</strong></td>
+                        <td><strong>88.96s</strong></td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <h3 style="margin-top: 25px; margin-bottom: 15px; color: #2c3e50;">Stage Breakdown</h3>
+            <div class="metrics-grid">
+                <div class="metric">
+                    <div class="metric-label">Asking AI</div>
+                    <div class="metric-value">9.98s</div>
+                    <div style="font-size: 0.9em; color: #6c757d; margin-top: 5px;">25.9% of total</div>
+                </div>
+                <div class="metric">
+                    <div class="metric-label">Pending Warehouse</div>
+                    <div class="metric-value">8.89s</div>
+                    <div style="font-size: 0.9em; color: #6c757d; margin-top: 5px;">20.3% of total</div>
+                </div>
+                <div class="metric">
+                    <div class="metric-label">Execution</div>
+                    <div class="metric-value">31.93s</div>
+                    <div style="font-size: 0.9em; color: #6c757d; margin-top: 5px;">58.4% of total</div>
+                </div>
+            </div>
+
+            <div class="insight-box">
+                <strong>Insight:</strong> Execution dominates at 58.4% of total time. <br><em>Note: Stage means sum to 50.80s vs actual mean of 50.10s due to 21 records missing warehouse timing (21/269 = 7.8%).</em>
+            </div>
+        </div>
+
+
+        <div class="stage-card">
+            <div class="stage-header">
+                <div class="stage-title">🔧 get_data_aggregation</div>
+                <div class="stage-count">354 calls (29.0%)</div>
+            </div>
+
+            <div class="metrics-grid">
+                <div class="metric">
+                    <div class="metric-label">Median</div>
+                    <div class="metric-value">40.41s</div>
+                </div>
+                <div class="metric">
+                    <div class="metric-label">Mean</div>
+                    <div class="metric-value">46.54s</div>
+                </div>
+                <div class="metric">
+                    <div class="metric-label">Min</div>
+                    <div class="metric-value">9.30s</div>
+                </div>
+                <div class="metric">
+                    <div class="metric-label">Max</div>
+                    <div class="metric-value">392.81s</div>
+                </div>
+            </div>
+
+            <table class="percentile-table">
+                <thead>
+                    <tr>
+                        <th>P25</th>
+                        <th>P50 (Median)</th>
+                        <th>P75</th>
+                        <th>P90</th>
+                        <th>P95</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><strong>30.52s</strong></td>
+                        <td><strong>40.41s</strong></td>
+                        <td><strong>59.29s</strong></td>
+                        <td><strong>79.38s</strong></td>
+                        <td><strong>87.59s</strong></td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <h3 style="margin-top: 25px; margin-bottom: 15px; color: #2c3e50;">Stage Breakdown</h3>
+            <div class="metrics-grid">
+                <div class="metric">
+                    <div class="metric-label">Asking AI</div>
+                    <div class="metric-value">7.79s</div>
+                    <div style="font-size: 0.9em; color: #6c757d; margin-top: 5px;">19.2% of total</div>
+                </div>
+                <div class="metric">
+                    <div class="metric-label">Pending Warehouse</div>
+                    <div class="metric-value">9.76s</div>
+                    <div style="font-size: 0.9em; color: #6c757d; margin-top: 5px;">27.0% of total</div>
+                </div>
+                <div class="metric">
+                    <div class="metric-label">Execution</div>
+                    <div class="metric-value">29.07s</div>
+                    <div style="font-size: 0.9em; color: #6c757d; margin-top: 5px;">54.1% of total</div>
+                </div>
+            </div>
+
+            <div class="insight-box">
+                <strong>Insight:</strong> Execution dominates at 54.1% of total time.
+            </div>
+        </div>
+
+
+        <div class="stage-card">
+            <div class="stage-header">
+                <div class="stage-title">🔧 get_data_aggregation_edfx</div>
+                <div class="stage-count">207 calls (17.0%)</div>
+            </div>
+
+            <div class="metrics-grid">
+                <div class="metric">
+                    <div class="metric-label">Median</div>
+                    <div class="metric-value">33.71s</div>
+                </div>
+                <div class="metric">
+                    <div class="metric-label">Mean</div>
+                    <div class="metric-value">35.65s</div>
+                </div>
+                <div class="metric">
+                    <div class="metric-label">Min</div>
+                    <div class="metric-value">4.81s</div>
+                </div>
+                <div class="metric">
+                    <div class="metric-label">Max</div>
+                    <div class="metric-value">90.31s</div>
+                </div>
+            </div>
+
+            <table class="percentile-table">
+                <thead>
+                    <tr>
+                        <th>P25</th>
+                        <th>P50 (Median)</th>
+                        <th>P75</th>
+                        <th>P90</th>
+                        <th>P95</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><strong>31.64s</strong></td>
+                        <td><strong>33.71s</strong></td>
+                        <td><strong>38.29s</strong></td>
+                        <td><strong>43.64s</strong></td>
+                        <td><strong>48.20s</strong></td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <h3 style="margin-top: 25px; margin-bottom: 15px; color: #2c3e50;">Stage Breakdown</h3>
+            <div class="metrics-grid">
+                <div class="metric">
+                    <div class="metric-label">Asking AI</div>
+                    <div class="metric-value">6.71s</div>
+                    <div style="font-size: 0.9em; color: #6c757d; margin-top: 5px;">20.9% of total</div>
+                </div>
+                <div class="metric">
+                    <div class="metric-label">Pending Warehouse</div>
+                    <div class="metric-value">18.60s</div>
+                    <div style="font-size: 0.9em; color: #6c757d; margin-top: 5px;">46.2% of total</div>
+                </div>
+                <div class="metric">
+                    <div class="metric-label">Execution</div>
+                    <div class="metric-value">11.51s</div>
+                    <div style="font-size: 0.9em; color: #6c757d; margin-top: 5px;">34.4% of total</div>
+                </div>
+            </div>
+
+            <div class="insight-box">
+                <strong>Insight:</strong> Warehouse Wait dominates at 46.2% of total time. <br><em>Note: Stage means sum to 36.82s vs actual mean of 35.65s due to 13 records missing warehouse timing (13/207 = 6.3%).</em> <br><em>Note: This tool uses SQL-level timing (duration_sql_execution) rather than agent-level timing (duration_executing_query). Execution time is measured at the database layer.</em>
+            </div>
+        </div>
+
+
+        <div class="stage-card">
+            <div class="stage-header">
+                <div class="stage-title">🔧 PSAnalysisResults</div>
+                <div class="stage-count">343 calls (28.1%)</div>
+            </div>
+
+            <div class="metrics-grid">
+                <div class="metric">
+                    <div class="metric-label">Median</div>
+                    <div class="metric-value">30.78s</div>
+                </div>
+                <div class="metric">
+                    <div class="metric-label">Mean</div>
+                    <div class="metric-value">31.51s</div>
+                </div>
+                <div class="metric">
+                    <div class="metric-label">Min</div>
+                    <div class="metric-value">9.18s</div>
+                </div>
+                <div class="metric">
+                    <div class="metric-label">Max</div>
+                    <div class="metric-value">92.57s</div>
+                </div>
+            </div>
+
+            <table class="percentile-table">
+                <thead>
+                    <tr>
+                        <th>P25</th>
+                        <th>P50 (Median)</th>
+                        <th>P75</th>
+                        <th>P90</th>
+                        <th>P95</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><strong>21.80s</strong></td>
+                        <td><strong>30.78s</strong></td>
+                        <td><strong>35.83s</strong></td>
+                        <td><strong>43.70s</strong></td>
+                        <td><strong>57.02s</strong></td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <h3 style="margin-top: 25px; margin-bottom: 15px; color: #2c3e50;">Stage Breakdown</h3>
+            <div class="metrics-grid">
+                <div class="metric">
+                    <div class="metric-label">Asking AI</div>
+                    <div class="metric-value">8.27s</div>
+                    <div style="font-size: 0.9em; color: #6c757d; margin-top: 5px;">28.1% of total</div>
+                </div>
+                <div class="metric">
+                    <div class="metric-label">Pending Warehouse</div>
+                    <div class="metric-value">17.87s</div>
+                    <div style="font-size: 0.9em; color: #6c757d; margin-top: 5px;">51.1% of total</div>
+                </div>
+                <div class="metric">
+                    <div class="metric-label">Execution</div>
+                    <div class="metric-value">6.82s</div>
+                    <div style="font-size: 0.9em; color: #6c757d; margin-top: 5px;">22.7% of total</div>
+                </div>
+            </div>
+
+            <div class="insight-box">
+                <strong>Insight:</strong> Warehouse Wait dominates at 51.1% of total time. <br><em>Note: Stage means sum to 32.96s vs actual mean of 31.51s due to 28 records missing warehouse timing (28/343 = 8.2%).</em>
+            </div>
+        </div>
+
+
+        <div class="stage-card">
+            <div class="stage-header">
+                <div class="stage-title">🔧 get_benchmark</div>
+                <div class="stage-count">18 calls (1.5%)</div>
+            </div>
+
+            <div class="metrics-grid">
+                <div class="metric">
+                    <div class="metric-label">Median</div>
+                    <div class="metric-value">30.71s</div>
+                </div>
+                <div class="metric">
+                    <div class="metric-label">Mean</div>
+                    <div class="metric-value">29.87s</div>
+                </div>
+                <div class="metric">
+                    <div class="metric-label">Min</div>
+                    <div class="metric-value">16.52s</div>
+                </div>
+                <div class="metric">
+                    <div class="metric-label">Max</div>
+                    <div class="metric-value">38.29s</div>
+                </div>
+            </div>
+
+            <table class="percentile-table">
+                <thead>
+                    <tr>
+                        <th>P25</th>
+                        <th>P50 (Median)</th>
+                        <th>P75</th>
+                        <th>P90</th>
+                        <th>P95</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><strong>25.45s</strong></td>
+                        <td><strong>30.71s</strong></td>
+                        <td><strong>35.55s</strong></td>
+                        <td><strong>36.99s</strong></td>
+                        <td><strong>38.14s</strong></td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <h3 style="margin-top: 25px; margin-bottom: 15px; color: #2c3e50;">Stage Breakdown</h3>
+            <div class="metrics-grid">
+                <div class="metric">
+                    <div class="metric-label">Asking AI</div>
+                    <div class="metric-value">14.41s</div>
+                    <div style="font-size: 0.9em; color: #6c757d; margin-top: 5px;">45.8% of total</div>
+                </div>
+                <div class="metric">
+                    <div class="metric-label">Pending Warehouse</div>
+                    <div class="metric-value">22.44s</div>
+                    <div style="font-size: 0.9em; color: #6c757d; margin-top: 5px;">52.4% of total</div>
+                </div>
+                <div class="metric">
+                    <div class="metric-label">Execution</div>
+                    <div class="metric-value">0.50s</div>
+                    <div style="font-size: 0.9em; color: #6c757d; margin-top: 5px;">1.9% of total</div>
+                </div>
+            </div>
+
+            <div class="insight-box">
+                <strong>Insight:</strong> Warehouse Wait dominates at 52.4% of total time. This tool performs relatively well with low latency. <br><em>Note: Stage means sum to 37.35s vs actual mean of 29.87s due to 6 records missing warehouse timing (6/18 = 33.3%).</em> <br><em>Note: This tool uses SQL-level timing (duration_sql_execution) rather than agent-level timing (duration_executing_query). Execution time is measured at the database layer.</em>
+            </div>
+        </div>
+
+
+        <div class="stage-card">
+            <div class="stage-header">
+                <div class="stage-title">🔧 query_cbmo_portfolio_loan_review</div>
+                <div class="stage-count">30 calls (2.5%)</div>
+            </div>
+
+            <div class="metrics-grid">
+                <div class="metric">
+                    <div class="metric-label">Median</div>
+                    <div class="metric-value">13.16s</div>
+                </div>
+                <div class="metric">
+                    <div class="metric-label">Mean</div>
+                    <div class="metric-value">13.08s</div>
+                </div>
+                <div class="metric">
+                    <div class="metric-label">Min</div>
+                    <div class="metric-value">5.61s</div>
+                </div>
+                <div class="metric">
+                    <div class="metric-label">Max</div>
+                    <div class="metric-value">22.04s</div>
+                </div>
+            </div>
+
+            <table class="percentile-table">
+                <thead>
+                    <tr>
+                        <th>P25</th>
+                        <th>P50 (Median)</th>
+                        <th>P75</th>
+                        <th>P90</th>
+                        <th>P95</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><strong>10.61s</strong></td>
+                        <td><strong>13.16s</strong></td>
+                        <td><strong>14.26s</strong></td>
+                        <td><strong>17.74s</strong></td>
+                        <td><strong>19.20s</strong></td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <h3 style="margin-top: 25px; margin-bottom: 15px; color: #2c3e50;">Stage Breakdown</h3>
+            <div class="metrics-grid">
+                <div class="metric">
+                    <div class="metric-label">Asking AI</div>
+                    <div class="metric-value">4.91s</div>
+                    <div style="font-size: 0.9em; color: #6c757d; margin-top: 5px;">37.6% of total</div>
+                </div>
+                <div class="metric">
+                    <div class="metric-label">Pending Warehouse</div>
+                    <div class="metric-value">6.99s</div>
+                    <div style="font-size: 0.9em; color: #6c757d; margin-top: 5px;">51.6% of total</div>
+                </div>
+                <div class="metric">
+                    <div class="metric-label">Execution</div>
+                    <div class="metric-value">1.41s</div>
+                    <div style="font-size: 0.9em; color: #6c757d; margin-top: 5px;">11.1% of total</div>
+                </div>
+            </div>
+
+            <div class="insight-box">
+                <strong>Insight:</strong> Warehouse Wait dominates at 51.6% of total time. This tool performs relatively well with low latency. <br><em>Note: This tool uses SQL-level timing (duration_sql_execution) rather than agent-level timing (duration_executing_query). Execution time is measured at the database layer.</em>
+            </div>
+        </div>
+
+
+    </div>
+
+    <script>
+        // Combined box plot with all three stages
+        var combinedData = [
+            {
+                y: [1.18, 4.81, 6.17, 8.63, 88.86],
+                type: 'box',
+                name: 'asking_ai<br>(1,331 records)',
+                marker: {
+                    color: '#17a2b8'
+                },
+                boxpoints: false,
+                quartilemethod: 'exclusive'
+            },
+            {
+                y: [2.23, 5.62, 8.98, 16.88, 88.03],
+                type: 'box',
+                name: 'pending_warehouse<br>(1,252 records)',
+                marker: {
+                    color: '#ffc107'
+                },
+                boxpoints: false,
+                quartilemethod: 'exclusive'
+            },
+            {
+                y: [0.00, 1.05, 15.98, 28.49, 382.57],
+                type: 'box',
+                name: 'Execution<br>(1,331 records)',
+                marker: {
+                    color: '#28a745'
+                },
+                boxpoints: false,
+                quartilemethod: 'exclusive'
+            }
+        ];
+
+        var combinedLayout = {
+            yaxis: {
+                title: 'Duration (seconds) - Log Scale',
+                zeroline: false,
+                type: 'log'
+            },
+            showlegend: true,
+            legend: {
+                x: 0.5,
+                y: 1.15,
+                xanchor: 'center',
+                orientation: 'h'
+            },
+            margin: {
+                l: 60,
+                r: 40,
+                t: 40,
+                b: 80
+            },
+            xaxis: {
+                showticklabels: true
+            }
+        };
+
+        Plotly.newPlot('boxplot-combined', combinedData, combinedLayout, {responsive: true});
+    </script>
+</body>
+</html>
